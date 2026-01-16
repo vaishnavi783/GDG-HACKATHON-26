@@ -1,49 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart Attend+</title>
 
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
 
   <!-- Google Charts -->
   <script src="https://www.gstatic.com/charts/loader.js"></script>
 
-  <!-- Firebase SDK (COMPAT – IMPORTANT) -->
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <link rel="stylesheet" href="style.css">
-
   <style>
-    body { font-family: Poppins; }
-    #dashboard { display: none; }
-    .spinner { display:none;width:30px;height:30px;border:4px solid #ddd;border-top:4px solid blue;border-radius:50%;animation:spin 1s linear infinite;margin:auto;}
-    @keyframes spin {100%{transform:rotate(360deg)}}
+    body { font-family: 'Poppins', sans-serif; margin:0; background:#f4f7f9; }
+    header { padding:15px 20px; background:#667eea; color:white; display:flex; justify-content:space-between; align-items:center; font-size:18px; font-weight:500; }
+    .logout-btn { background:#ff5e5e; border:none; padding:5px 10px; border-radius:4px; color:white; cursor:pointer; }
+    .dashboard-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:15px; padding:20px; }
+    .card { background:white; border-radius:10px; padding:15px; box-shadow:0 2px 8px rgba(0,0,0,0.1); min-height:130px; }
+    button { cursor:pointer; border:none; padding:8px 12px; border-radius:5px; background:#667eea; color:white; font-weight:500; }
+    #dashboard { display:none; }
+    .spinner { display:none; border:4px solid rgba(0,0,0,0.1); border-radius:50%; border-top:4px solid #3498db; width:40px; height:40px; animation:spin 1s linear infinite; margin:20px auto; }
+    @keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }
     #teacher-projects-card { display:none; }
+    #student-project-card { display:none; }
   </style>
 </head>
-
 <body>
 
-<!-- LOGIN -->
+<!-- LOGIN PAGE -->
 <div id="login-page">
-  <div class="card login-card">
+  <div class="card login-card" style="max-width:350px;margin:50px auto;text-align:center;">
     <h2>Smart Attend+</h2>
-    <input id="email" type="email" placeholder="Email">
-    <input id="password" type="password" placeholder="Password">
-
-    <select id="role">
+    <p>Fair • Transparent • Stress-Free</p>
+    <input id="email" type="email" placeholder="College Email" required style="width:90%;margin:8px 0;padding:8px;">
+    <input id="password" type="password" placeholder="Password" required style="width:90%;margin:8px 0;padding:8px;">
+    <select id="role" style="width:94%;margin:8px 0;padding:8px;">
       <option value="student">Student</option>
       <option value="teacher">Teacher</option>
     </select>
-
-    <div id="login-spinner" class="spinner"></div>
+    <div class="spinner" id="login-spinner"></div>
     <button onclick="login()">Login</button>
-    <p id="login-error" style="color:red"></p>
+    <p id="login-error" style="color:red; display:none;"></p>
   </div>
 </div>
 
@@ -51,29 +54,65 @@
 <div id="dashboard">
   <header>
     🌸 Smart Attendance Portal
-    <button onclick="logout()">Logout</button>
+    <button class="logout-btn" onclick="logout()">Logout</button>
   </header>
 
-  <p><span id="user-email"></span> | <span id="user-role"></span></p>
-  <p id="quoteText"></p>
+  <div class="dashboard-grid">
+    <!-- Mark Attendance -->
+    <div class="card">
+      <h3>📷 Mark Attendance</h3>
+      <button onclick="markAttendance()">Scan QR & Mark</button>
+      <p id="status"></p>
+    </div>
 
-  <button onclick="markAttendance()">📷 Mark Attendance</button>
-  <p id="status"></p>
+    <!-- Attendance Prediction -->
+    <div class="card">
+      <h3>📊 Attendance Prediction</h3>
+      <button onclick="getPrediction()">Predict Attendance Risk</button>
+      <p id="prediction"></p>
+    </div>
 
-  <div id="attendance-summary"></div>
+    <!-- One-Time Correction -->
+    <div class="card">
+      <h3>🔐 One-Time Correction</h3>
+      <button onclick="requestCorrection()">Request Correction</button>
+      <p id="correctionStatus"></p>
+    </div>
 
-  <button onclick="requestCorrection()">🔐 One-Time Correction</button>
+    <!-- Audit Logs -->
+    <div class="card">
+      <h3>🧾 Audit Logs</h3>
+      <div id="chart_div" style="height:250px;"></div>
+    </div>
 
-  <div id="student-project-card">
-    <button onclick="submitProjectWork()">📂 Submit Project</button>
+    <!-- Attendance Summary -->
+    <div class="card">
+      <h3>📈 Attendance Summary</h3>
+      <div id="attendance-summary">
+        <p>Total Classes: <span id="total-classes">0</span></p>
+        <p>Present: <span id="present-count">0</span></p>
+        <p>Percentage: <span id="attendance-percentage">0%</span></p>
+      </div>
+    </div>
+
+    <!-- Today's Classes -->
+    <div class="card">
+      <h3>🎯 Today's Classes</h3>
+      <div id="todays-classes"><p>No classes today</p></div>
+    </div>
+
+    <!-- Project Work -->
+    <div class="card" id="student-project-card">
+      <h3>📂 Project Work</h3>
+      <button onclick="submitProjectWork()">Submit Project Work</button>
+    </div>
+
+    <!-- Teacher Project Submissions -->
+    <div class="card" id="teacher-projects-card">
+      <h3>📁 Project Submissions</h3>
+      <div id="project-submissions"></div>
+    </div>
   </div>
-
-  <div id="teacher-projects-card">
-    <h3>Project Submissions</h3>
-    <div id="project-submissions"></div>
-  </div>
-
-  <div id="chart_div" style="height:250px"></div>
 </div>
 
 <!-- FIREBASE CONFIG -->
@@ -81,9 +120,14 @@
   const firebaseConfig = {
     apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
     authDomain: "attendx-6be15.firebaseapp.com",
-    projectId: "attendx-6be15"
+    projectId: "attendx-6be15",
+    storageBucket: "attendx-6be15.appspot.com",
+    messagingSenderId: "593387890331",
+    appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
   };
   firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 </script>
 
 <script src="app.js"></script>
