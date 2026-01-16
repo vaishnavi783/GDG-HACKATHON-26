@@ -1,175 +1,173 @@
-const auth = firebase.auth();
-const db = firebase.firestore();
 let currentUser = null;
 
-/* ---------------- INIT ---------------- */
-auth.onAuthStateChanged(async user => {
-  if (user) loadUserData(user.uid);
-  else showLogin();
+// INITIALIZE
+document.addEventListener('DOMContentLoaded', function() {
+    auth.onAuthStateChanged(user => {
+        if (user) loadUserData(user.uid);
+        else showLogin();
+    });
 });
 
-/* ---------------- LOGIN ---------------- */
+// LOGIN
 async function login() {
-  const email = emailInput();
-  const password = passwordInput();
-  const role = document.getElementById("role").value;
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const role = document.getElementById('role').value;
+    const spinner = document.getElementById('login-spinner');
+    const loginBtn = document.querySelector('.login-card button');
+    const errorElement = document.getElementById('login-error');
 
-  try {
-    const res = await auth.signInWithEmailAndPassword(email, password);
-    const uid = res.user.uid;
+    if (!email || !password) { showError('Enter email & password'); return; }
 
-    const snap = await db.collection("users").doc(uid).get();
-    if (!snap.exists) throw "User record missing";
+    spinner.style.display = 'block';
+    loginBtn.disabled = true;
+    errorElement.style.display = 'none';
 
-    if (snap.data().role !== role) throw "Role mismatch";
-
-    currentUser = { uid, ...snap.data() };
-    showDashboard();
-  } catch (e) {
-    showError(e);
-  }
+    try {
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        const uid = userCredential.user.uid;
+        const userDoc = await db.collection('users').doc(uid).get();
+        if (!userDoc.exists) throw 'User not found';
+        const userData = userDoc.data();
+        if (userData.role !== role) throw 'Role mismatch';
+        currentUser = { uid, ...userData };
+        localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
+        showDashboard();
+    } catch (err) { showError(err.message || err); }
+    finally { spinner.style.display='none'; loginBtn.disabled=false; }
 }
 
-/* ---------------- LOGOUT ---------------- */
+function showError(msg) {
+    const errorElement = document.getElementById('login-error');
+    errorElement.textContent = msg;
+    errorElement.style.display = 'block';
+}
+
+// LOGOUT
 function logout() {
-  auth.signOut();
-  currentUser = null;
-  showLogin();
+    auth.signOut();
+    currentUser = null;
+    localStorage.removeItem('smartAttendUser');
+    showLogin();
 }
 
-/* ---------------- UI ---------------- */
 function showLogin() {
-  document.getElementById("login-page").style.display = "block";
-  document.getElementById("dashboard").style.display = "none";
+    document.getElementById('login-page').style.display='block';
+    document.getElementById('dashboard').style.display='none';
 }
 
+// DASHBOARD
 function showDashboard() {
-  document.getElementById("login-page").style.display = "none";
-  document.getElementById("dashboard").style.display = "block";
+    document.getElementById('login-page').style.display='none';
+    document.getElementById('dashboard').style.display='block';
 
-  document.getElementById("user-email").innerText = currentUser.email;
-  document.getElementById("user-role").innerText = currentUser.role;
+    if(currentUser.role==='teacher') document.getElementById('teacher-projects-card').style.display='block';
+    else document.getElementById('student-project-card').style.display='block';
 
-  displayQuote();
-  loadAttendance();
-
-  if (currentUser.role === "teacher") {
-    document.getElementById("teacher-projects-card").style.display = "block";
+    loadAttendanceData();
+    loadTodaysClasses();
     loadProjectSubmissions();
-  }
+    initializeCharts();
 }
 
-/* ---------------- ATTENDANCE ---------------- */
+// USER DATA
+async function loadUserData(uid) {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) return showLogin();
+    currentUser = { uid, ...doc.data() };
+    showDashboard();
+}
+
+// ATTENDANCE
 async function markAttendance() {
-  const today = new Date().toISOString().split("T")[0];
-  const ref = db.collection("attendance").doc(currentUser.uid);
-  const snap = await ref.get();
-
-  let data = snap.exists ? snap.data() : { total: 0, present: 0, history: [] };
-
-  if (data.history[0]?.date === today) {
-    alert("Already marked today");
-    return;
-  }
-
-  data.total++;
-  data.present++;
-  data.history.unshift({ date: today });
-
-  await ref.set(data);
-  loadAttendance();
+    if (currentUser.role!=='student') return alert('Only students can mark attendance');
+    const today = new Date().toISOString().split('T')[0];
+    const ref = db.collection('attendance').doc(currentUser.uid);
+    await db.runTransaction(async tx=>{
+        const doc = await tx.get(ref);
+        let data = doc.exists?doc.data():{ totalClasses:0, presentCount:0, history:[] };
+        data.totalClasses +=1;
+        data.presentCount +=1;
+        data.history.unshift({ date:today,status:'Present' });
+        tx.set(ref,data);
+    });
+    loadAttendanceData();
 }
 
-async function loadAttendance() {
-  const ref = db.collection("attendance").doc(currentUser.uid);
-  const snap = await ref.get();
-  if (!snap.exists) return;
-
-  const d = snap.data();
-  const pct = ((d.present / d.total) * 100).toFixed(1);
-
-  document.getElementById("attendance-summary").innerHTML =
-    `Total: ${d.total} | Present: ${d.present} | ${pct}%`;
+async function loadAttendanceData() {
+    const summary = document.getElementById('attendance-summary');
+    if (currentUser.role==='student') {
+        const doc = await db.collection('attendance').doc(currentUser.uid).get();
+        const data = doc.exists?doc.data():{ totalClasses:0, presentCount:0 };
+        const percent = data.totalClasses?((data.presentCount/data.totalClasses)*100).toFixed(1):0;
+        summary.innerHTML=`<p>Total Classes: ${data.totalClasses}</p>
+                           <p>Present: ${data.presentCount}</p>
+                           <p>Percentage: ${percent}%</p>`;
+    } else summary.innerHTML='Teacher dashboard';
 }
 
-/* ---------------- CORRECTION ---------------- */
-async function requestCorrection() {
-  const reason = prompt("Enter reason");
-  if (!reason) return;
-
-  await db.collection("correctionRequests").add({
-    student: currentUser.email,
-    reason,
-    status: "Pending",
-    time: new Date()
-  });
-
-  alert("Request sent");
-}
-
-/* ---------------- PROJECT ---------------- */
+// PROJECTS
 async function submitProjectWork() {
-  const title = prompt("Project title");
-  if (!title) return;
-
-  await db.collection("projectSubmissions").add({
-    title,
-    student: currentUser.email,
-    status: "Pending",
-    time: new Date()
-  });
-
-  alert("Submitted");
+    const title = prompt('Enter project title:');
+    if (!title) return;
+    await db.collection('projectSubmissions').add({ studentEmail:currentUser.email, studentName:currentUser.name, title, status:'Pending', submittedAt:new Date().toISOString() });
+    alert('Project submitted!');
 }
 
 async function loadProjectSubmissions() {
-  const box = document.getElementById("project-submissions");
-  box.innerHTML = "";
-
-  const snap = await db.collection("projectSubmissions").get();
-  snap.forEach(doc => {
-    const d = doc.data();
-    box.innerHTML += `
-      <div>
-        ${d.student} - ${d.title} (${d.status})
-        <button onclick="updateProject('${doc.id}','Approved')">✔</button>
-        <button onclick="updateProject('${doc.id}','Rejected')">✖</button>
-      </div>`;
-  });
+    const container = document.getElementById('project-submissions');
+    container.innerHTML='';
+    if(currentUser.role!=='teacher') return;
+    const snapshot = await db.collection('projectSubmissions').get();
+    snapshot.forEach(doc=>{
+        const proj = doc.data();
+        const div = document.createElement('div');
+        div.innerHTML=`${proj.studentName}: ${proj.title} - ${proj.status} 
+        <button onclick="updateProjectStatus('${doc.id}','Approved')">Approve</button>
+        <button onclick="updateProjectStatus('${doc.id}','Rejected')">Reject</button>`;
+        container.appendChild(div);
+    });
 }
 
-async function updateProject(id, status) {
-  await db.collection("projectSubmissions").doc(id).update({ status });
-  loadProjectSubmissions();
+async function updateProjectStatus(id,status) {
+    await db.collection('projectSubmissions').doc(id).update({status});
+    loadProjectSubmissions();
 }
 
-/* ---------------- UTIL ---------------- */
-function displayQuote() {
-  const q = [
-    "Success is not final",
-    "Believe in yourself",
-    "Work smart"
-  ];
-  document.getElementById("quoteText").innerText =
-    q[Math.floor(Math.random() * q.length)];
+// CHARTS
+function initializeCharts() {
+    google.charts.load('current',{packages:['corechart']});
+    google.charts.setOnLoadCallback(()=>{
+        const data = google.visualization.arrayToDataTable([
+            ['Day','Attendance',{role:'style'}],
+            ['Mon',85,'#667eea'],['Tue',92,'#667eea'],['Wed',78,'#667eea'],
+            ['Thu',95,'#667eea'],['Fri',88,'#667eea'],['Sat',65,'#764ba2'],['Sun',0,'#764ba2']
+        ]);
+        const options = { title:'Weekly Attendance', backgroundColor:'transparent', legend:{position:'bottom'} };
+        const chart = new google.visualization.ColumnChart(document.getElementById('chart_div'));
+        chart.draw(data,options);
+        window.addEventListener('resize',()=>chart.draw(data,options));
+    });
 }
 
-function loadUserData(uid) {
-  db.collection("users").doc(uid).get().then(doc => {
-    if (!doc.exists) return logout();
-    currentUser = { uid, ...doc.data() };
-    showDashboard();
-  });
+// CLASSES
+function loadTodaysClasses() {
+    const demoClasses={0:['Weekend'],1:['Math 9AM','Physics 11AM'],2:['Chem 10AM','Bio 1PM'],3:['CS 9AM','AI 2PM'],4:['DS 10AM'],5:['Project 9AM','Seminar 3PM'],6:['No classes']};
+    const today = new Date().getDay();
+    const clsEl = document.getElementById('todays-classes');
+    clsEl.innerHTML = demoClasses[today].map(c=>`<div>${c}</div>`).join('');
 }
 
-function showError(e) {
-  document.getElementById("login-error").innerText =
-    e.message || e;
+// ONE-TIME CORRECTION
+async function requestCorrection() {
+    const reason = prompt('Enter reason for correction:');
+    if(!reason) return;
+    await db.collection('correctionRequests').add({userEmail:currentUser.email, userName:currentUser.name, reason,status:'Pending',requestedAt:new Date().toISOString()});
+    alert('Correction request submitted!');
 }
 
-function emailInput() {
-  return document.getElementById("email").value.trim();
-}
-function passwordInput() {
-  return document.getElementById("password").value;
+// ATTENDANCE PREDICTION (dummy)
+function getPrediction() {
+    const predictionEl = document.getElementById('prediction');
+    predictionEl.textContent='Your predicted risk: '+(Math.random()*50).toFixed(1)+'%';
 }
