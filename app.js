@@ -265,3 +265,4 @@ async function loadUserData(uid){
     localStorage.setItem('smartAttendUser',JSON.stringify(currentUser));
     showDashboard();
 }
+
