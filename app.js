@@ -1,11 +1,10 @@
 let currentUser = null;
 
 // ================= INIT =================
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
     updateDateTime();
     setInterval(updateDateTime,1000);
     displayRandomQuote();
-
     auth.onAuthStateChanged(user => {
         if(user) loadUserData(user.uid);
         else showLogin();
@@ -14,48 +13,51 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ================= LOGIN =================
 async function login(){
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const role = document.getElementById('role').value;
+    const email=document.getElementById('email').value.trim();
+    const password=document.getElementById('password').value;
+    const role=document.getElementById('role').value;
+    const spinner=document.getElementById('login-spinner');
+    const loginBtn=document.querySelector('.login-card button');
+    const errorElement=document.getElementById('login-error');
 
-    const spinner = document.getElementById('login-spinner');
-    const btn = document.querySelector('#login-page button');
-    const error = document.getElementById('login-error');
-
-    if(!email || !password){ showError('Enter email & password'); return; }
+    if(!email||!password){ showError('Please enter email & password'); return; }
 
     spinner.style.display='block';
-    btn.disabled=true; error.style.display='none';
+    loginBtn.disabled=true;
+    errorElement.style.display='none';
 
     try{
-        const userCredential = await auth.signInWithEmailAndPassword(email,password);
-        const uid = userCredential.user.uid;
-        const doc = await db.collection('users').doc(uid).get();
-        if(!doc.exists) throw 'User data not found';
-        const userData = doc.data();
+        const userCredential=await auth.signInWithEmailAndPassword(email,password);
+        const uid=userCredential.user.uid;
+
+        const userDoc=await db.collection('users').doc(uid).get();
+        if(!userDoc.exists) throw 'User not found';
+        const userData=userDoc.data();
         if(userData.role!==role) throw 'Role mismatch';
 
-        currentUser = { uid, ...userData };
-        localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
+        currentUser={uid,...userData};
+        localStorage.setItem('smartAttendUser',JSON.stringify(currentUser));
 
-        btn.innerHTML='✓ Login Successful!'; btn.style.background='#2ecc71';
+        loginBtn.innerHTML='✓ Login Successful!';
+        loginBtn.style.backgroundColor='#2ecc71';
         setTimeout(showDashboard,1000);
-    }catch(err){
-        showError('Login failed: '+ (err.message || err));
+    }catch(error){
+        showError('Login failed: '+(error.message||error));
     }finally{
         spinner.style.display='none';
-        btn.disabled=false;
+        loginBtn.disabled=false;
     }
 }
 
 function showError(msg){
-    const e = document.getElementById('login-error');
-    e.innerText=msg; e.style.display='block';
+    const errorElement=document.getElementById('login-error');
+    errorElement.innerHTML=msg;
+    errorElement.style.display='block';
 }
 
 // ================= LOGOUT =================
 function logout(){
-    if(confirm('Logout?')){
+    if(confirm('Are you sure you want to logout?')){
         auth.signOut();
         localStorage.removeItem('smartAttendUser');
         currentUser=null;
@@ -72,159 +74,194 @@ function showLogin(){
 function showDashboard(){
     document.getElementById('login-page').style.display='none';
     document.getElementById('dashboard').style.display='block';
-    document.getElementById('user-email').innerText=currentUser.email;
-    document.getElementById('user-role').innerText=currentUser.role;
+    document.getElementById('user-email').textContent=currentUser.email;
+    document.getElementById('user-role').textContent=currentUser.role.charAt(0).toUpperCase()+currentUser.role.slice(1);
+    document.querySelector('header').innerHTML=`🌸 Smart Attendance & Wellness Portal | Welcome, ${currentUser.name} <button onclick="logout()" class="logout-btn">Logout</button>`;
 
     initializeCharts();
     loadAttendanceData();
     loadTodaysClasses();
 
-    if(currentUser.role==='teacher') document.getElementById('teacher-projects-card').style.display='block';
-    else document.getElementById('student-project-card').style.display='block';
-
-    if(currentUser.role==='teacher') loadProjectSubmissions();
+    if(currentUser.role==='teacher'){
+        document.getElementById('teacher-projects-card').style.display='block';
+        loadProjectSubmissions();
+    } else {
+        document.getElementById('student-project-card').style.display='block';
+    }
 }
 
-// ================= DATE & QUOTES =================
+// ================= DATE & QUOTE =================
 const quotes=[
-    "Education is the most powerful weapon. - Nelson Mandela",
-    "The future belongs to those who believe in dreams. - Eleanor Roosevelt",
-    "Success is courage to continue. - Winston Churchill",
-    "Your time is limited. - Steve Jobs"
+    "Education is the most powerful weapon which you can use to change the world. - Nelson Mandela",
+    "The future belongs to those who believe in the beauty of their dreams. - Eleanor Roosevelt",
+    "Success is not final, failure is not fatal: it is the courage to continue that counts. - Winston Churchill",
+    "Your time is limited, don't waste it living someone else's life. - Steve Jobs",
+    "Don't watch the clock; do what it does. Keep going. - Sam Levenson",
+    "Believe you can and you're halfway there. - Theodore Roosevelt",
+    "The secret of getting ahead is getting started. - Mark Twain"
 ];
 
 function displayRandomQuote(){
-    const q=document.getElementById('quoteText');
-    q.innerText=quotes[Math.floor(Math.random()*quotes.length)];
-    setInterval(()=>{q.innerText=quotes[Math.floor(Math.random()*quotes.length)]},30000);
+    const quoteElement=document.getElementById('quoteText');
+    quoteElement.textContent=quotes[Math.floor(Math.random()*quotes.length)];
+    setInterval(()=>{quoteElement.textContent=quotes[Math.floor(Math.random()*quotes.length)];},30000);
 }
 
 function updateDateTime(){
     const now=new Date();
-    document.getElementById('date').innerText=now.toLocaleDateString();
-    document.getElementById('time').innerText=now.toLocaleTimeString();
+    document.getElementById('date').textContent=now.toLocaleDateString('en-US',{weekday:'long', year:'numeric', month:'long', day:'numeric'});
+    document.getElementById('time').textContent=now.toLocaleTimeString('en-US',{hour12:true, hour:'2-digit', minute:'2-digit'});
 }
 
 // ================= ATTENDANCE =================
 async function markAttendance(){
     if(currentUser.role!=='student'){ alert('Only students can mark attendance'); return; }
-    const status=document.getElementById('status'); status.innerText='Marking...';
+    const statusElement=document.getElementById('status');
+    statusElement.innerHTML='📷 Scanning QR...';
     try{
-        const today = new Date().toISOString().split('T')[0];
-        const ref = db.collection('attendance').doc(currentUser.uid);
-        await db.runTransaction(async t=>{
-            const doc = await t.get(ref);
-            const data = doc.exists ? doc.data() : {totalClasses:0,presentCount:0,history:[]};
-            data.totalClasses++; data.presentCount++;
+        const today=new Date().toISOString().split('T')[0];
+        const attendanceRef=db.collection('attendance').doc(currentUser.uid);
+        await db.runTransaction(async transaction=>{
+            const doc=await transaction.get(attendanceRef);
+            let data=doc.exists?doc.data():{totalClasses:0,presentCount:0,history:[]};
+            data.totalClasses+=1;
+            data.presentCount+=1;
             data.history.unshift({date:today,status:'Present'});
-            t.set(ref,data);
+            transaction.set(attendanceRef,data);
         });
-        status.innerText='✅ Attendance marked';
+        statusElement.innerHTML='✅ Attendance marked!';
         loadAttendanceData();
     }catch(err){
-        status.innerText='❌ Failed';
+        statusElement.innerHTML='❌ Failed';
         console.error(err);
     }
 }
 
 async function loadAttendanceData(){
-    const sum = document.getElementById('attendance-summary');
+    const summaryElement=document.getElementById('attendance-summary');
     if(currentUser.role==='student'){
-        const doc = await db.collection('attendance').doc(currentUser.uid).get();
-        const data = doc.exists ? doc.data() : {totalClasses:0,presentCount:0};
-        const pct = data.totalClasses ? (data.presentCount/data.totalClasses*100).toFixed(1) : 0;
-        sum.innerHTML=`Total: ${data.totalClasses}<br>Present: ${data.presentCount}<br>Percentage: ${pct}%`;
-    }else sum.innerHTML='Teacher dashboard';
+        try{
+            const doc=await db.collection('attendance').doc(currentUser.uid).get();
+            const data=doc.exists?doc.data():{totalClasses:0,presentCount:0};
+            const percent=data.totalClasses?((data.presentCount/data.totalClasses)*100).toFixed(1):0;
+            summaryElement.innerHTML=`<p>Total Classes: ${data.totalClasses}</p><p>Present: ${data.presentCount}</p><p>Percentage: ${percent}%</p>`;
+        }catch(err){ console.error(err);}
+    } else summaryElement.innerHTML=`<p>Teacher dashboard: View student attendance</p>`;
+}
+
+// ================= PREDICTION =================
+async function getPrediction(){
+    const doc=await db.collection('attendance').doc(currentUser.uid).get();
+    const data=doc.exists?doc.data():{totalClasses:0,presentCount:0};
+    let risk='Low';
+    if(data.totalClasses>0){
+        const percent=(data.presentCount/data.totalClasses)*100;
+        if(percent<60) risk='High';
+        else if(percent<80) risk='Medium';
+    }
+    document.getElementById('prediction').textContent=`Attendance Risk: ${risk}`;
+}
+
+// ================= ONE-TIME CORRECTION =================
+async function requestCorrection(){
+    const reason=prompt('Enter reason for correction:');
+    if(!reason) return;
+    try{
+        await db.collection('correctionRequests').add({
+            studentName:currentUser.name,
+            studentEmail:currentUser.email,
+            reason,
+            submittedAt:new Date().toISOString(),
+            status:'Pending'
+        });
+        document.getElementById('correctionStatus').textContent='Request submitted!';
+    }catch(err){ console.error(err);}
 }
 
 // ================= PROJECT WORK =================
 async function submitProjectWork(){
-    const title=prompt('Enter project title'); if(!title) return;
-    await db.collection('projectSubmissions').add({
-        studentEmail:currentUser.email,
-        studentName:currentUser.name,
-        title:title,
-        status:'Pending',
-        submittedAt:new Date().toISOString()
-    });
-    showNotification('Project submitted','success');
+    const title=prompt('Enter Project Title:');
+    if(!title) return;
+    try{
+        await db.collection('projectSubmissions').add({
+            studentName:currentUser.name,
+            studentEmail:currentUser.email,
+            title,
+            submittedAt:new Date().toISOString(),
+            status:'Pending'
+        });
+        showNotification('Project submitted','success');
+    }catch(err){ showNotification('Failed to submit','error'); }
 }
 
 async function loadProjectSubmissions(){
     const container=document.getElementById('project-submissions');
     container.innerHTML='';
-    const snapshot = await db.collection('projectSubmissions').get();
+    const snapshot=await db.collection('projectSubmissions').get();
     snapshot.forEach(doc=>{
-        const p=doc.data();
-        const div=document.createElement('div'); div.className='project-item';
-        div.innerHTML=`<span>${p.studentName}: ${p.title} - ${p.status}</span>
+        const proj=doc.data();
+        const div=document.createElement('div');
+        div.className='project-item';
+        div.innerHTML=`<span>${proj.studentName}: ${proj.title} - ${proj.status}</span>
         <button onclick="updateProjectStatus('${doc.id}','Approved')">Approve</button>
         <button onclick="updateProjectStatus('${doc.id}','Rejected')">Reject</button>`;
         container.appendChild(div);
     });
 }
 
-async function updateProjectStatus(docId,status){
-    await db.collection('projectSubmissions').doc(docId).update({status});
+async function updateProjectStatus(id,status){
+    await db.collection('projectSubmissions').doc(id).update({status});
     loadProjectSubmissions();
     showNotification(`Project ${status}`,status==='Approved'?'success':'error');
 }
 
-// ================= CHARTS =================
+// ================= TODAY'S CLASSES =================
+function loadTodaysClasses(){
+    const demo={
+        1:['Math (9AM)','Physics (11AM)','CS (2PM)'],
+        2:['Chemistry (10AM)','Biology (1PM)','English (3PM)'],
+        3:['Math (9AM)','Physics Lab (11AM)','Programming (2PM)'],
+        4:['DS (10AM)','Chemistry Lab (2PM)'],
+        5:['Project Work (9AM)','Seminar (3PM)'],
+        6:['No Classes'],0:['Weekend']
+    };
+    const today=new Date().getDay();
+    document.getElementById('todays-classes').innerHTML=demo[today].map(c=>`<div>${c}</div>`).join('');
+}
+
+// ================= AUDIT LOGS =================
 function initializeCharts(){
     google.charts.load('current',{packages:['corechart']});
-    google.charts.setOnLoadCallback(()=>{
-        const data = google.visualization.arrayToDataTable([
-            ['Day','Attendance %',{role:'style'}],
-            ['Mon',85,'#667eea'],['Tue',92,'#667eea'],['Wed',78,'#667eea'],
-            ['Thu',95,'#667eea'],['Fri',88,'#667eea'],['Sat',65,'#764ba2'],['Sun',0,'#764ba2']
-        ]);
-        const options={title:'Weekly Attendance',legend:{position:'bottom'},backgroundColor:'transparent'};
-        const chart = new google.visualization.ColumnChart(document.getElementById('chart_div'));
+    google.charts.setOnLoadCallback(async ()=>{
+        const snapshot=await db.collection('attendance').get();
+        const dataArr=[['Student','Present %',{role:'style'}]];
+        snapshot.forEach(doc=>{
+            const d=doc.data();
+            const percent=d.totalClasses?((d.presentCount/d.totalClasses)*100).toFixed(1):0;
+            dataArr.push([d.name||doc.id,parseFloat(percent),'#667eea']);
+        });
+        const data=google.visualization.arrayToDataTable(dataArr);
+        const options={title:'Attendance Summary', legend:{position:'bottom'}, backgroundColor:'transparent', vAxis:{viewWindow:{min:0,max:100}}};
+        const chart=new google.visualization.ColumnChart(document.getElementById('chart_div'));
         chart.draw(data,options);
         window.addEventListener('resize',()=>chart.draw(data,options));
     });
 }
 
-// ================= TODAY CLASSES =================
-function loadTodaysClasses(){
-    const demo={1:['Math','Physics'],2:['Chemistry','Bio'],3:['CS'],4:['DS'],5:['Project'],6:['No Classes'],0:['Weekend']};
-    const today=new Date().getDay();
-    document.getElementById('todays-classes').innerHTML=demo[today].map(c=>`<div>${c}</div>`).join('');
-}
-
-// ================= NOTIFICATIONS =================
+// ================= NOTIFICATION =================
 function showNotification(msg,type='info'){
-    const n=document.createElement('div'); n.className='notification '+type;
+    const n=document.createElement('div');
+    n.className=`notification ${type}`;
     n.innerHTML=`<span>${msg}</span><button onclick="this.parentElement.remove()">×</button>`;
     document.body.appendChild(n);
-    setTimeout(()=>{if(n.parentElement) n.remove();},5000);
+    setTimeout(()=>{ if(n.parentElement) n.remove(); },5000);
 }
 
 // ================= LOAD USER =================
 async function loadUserData(uid){
-    const doc=await db.collection('users').doc(uid).get();
-    if(!doc.exists) return showLogin();
-    currentUser={uid,...doc.data()};
+    const userDoc=await db.collection('users').doc(uid).get();
+    if(!userDoc.exists) return showLogin();
+    currentUser={uid,...userDoc.data()};
     localStorage.setItem('smartAttendUser',JSON.stringify(currentUser));
     showDashboard();
-}
-
-// ================= ONE-TIME CORRECTION =================
-async function requestCorrection(){
-    const reason=prompt('Enter correction reason'); if(!reason) return;
-    await db.collection('correctionRequests').add({
-        studentName:currentUser.name,
-        studentEmail:currentUser.email,
-        reason:reason,
-        status:'Pending',
-        submittedAt:new Date().toISOString()
-    });
-    showNotification('Correction requested','success');
-}
-
-// ================= ATTENDANCE PREDICTION =================
-function getPrediction(){
-    const p=Math.floor(Math.random()*30)+70;
-    document.getElementById('prediction').innerText=`Attendance Risk: ${p}%`;
 }
