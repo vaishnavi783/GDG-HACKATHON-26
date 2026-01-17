@@ -16,18 +16,20 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+  <!-- Your existing CSS -->
   <link rel="stylesheet" href="style.css">
+
 </head>
 <body>
 
 <!-- ================= LOGIN PAGE ================= -->
 <div id="login-page">
-  <div class="card login-card">
+  <div class="login-card card">
     <h2>Smart Attend+</h2>
     <p class="sub">Fair • Transparent • Stress-Free</p>
 
-    <input id="email" type="email" placeholder="College Email" required>
-    <input id="password" type="password" placeholder="Password" required>
+    <input id="email" type="email" placeholder="College Email">
+    <input id="password" type="password" placeholder="Password">
 
     <select id="role">
       <option value="student">Student</option>
@@ -36,7 +38,7 @@
 
     <div class="spinner" id="login-spinner"></div>
     <button onclick="login()">Login</button>
-    <p id="login-error" style="color: red; display: none;"></p>
+    <p id="login-error" style="color:red; display:none;"></p>
   </div>
 </div>
 
@@ -86,7 +88,7 @@
 
     <div class="card">
       <h3>🧾 Audit Logs</h3>
-      <div id="chart_div" style="height: 250px;"></div>
+      <div id="chart_div"></div>
     </div>
 
     <div class="card">
@@ -126,11 +128,12 @@
     apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
     authDomain: "attendx-6be15.firebaseapp.com",
     projectId: "attendx-6be15",
-    storageBucket: "attendx-6be15.appspot.com",
+    storageBucket: "attendx-6be15.firebasestorage.app",
     messagingSenderId: "593387890331",
     appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
   };
 
+  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
