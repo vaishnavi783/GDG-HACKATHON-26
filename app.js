@@ -1,11 +1,11 @@
-// ================= Firebase Config =================
+// =================== FIREBASE CONFIG ===================
 const firebaseConfig = {
-  apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-  authDomain: "attendx-6be15.firebaseapp.com",
-  projectId: "attendx-6be15",
-  storageBucket: "attendx-6be15.firebasestorage.app",
-  messagingSenderId: "593387890331",
-  appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
+    apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
+    authDomain: "attendx-6be15.firebaseapp.com",
+    projectId: "attendx-6be15",
+    storageBucket: "attendx-6be15.firebasestorage.app",
+    messagingSenderId: "593387890331",
+    appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -14,89 +14,88 @@ const db = firebase.firestore();
 
 let currentUser = null;
 
-// ================= LOGIN =================
+// =================== LOGIN ===================
 async function login() {
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const role = document.getElementById('role').value;
     const errorEl = document.getElementById('login-error');
+    errorEl.style.display = 'none';
 
     try {
         const userCredential = await auth.signInWithEmailAndPassword(email, password);
         const uid = userCredential.user.uid;
 
         const userDoc = await db.collection('users').doc(uid).get();
-        if (!userDoc.exists) throw 'User not found';
-
+        if(!userDoc.exists) throw 'User not found';
         const userData = userDoc.data();
         if(userData.role !== role) throw 'Role mismatch';
 
         currentUser = { uid, ...userData };
+        localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
         showDashboard();
-    } catch (err) {
+    } catch(err) {
+        errorEl.innerText = 'Login failed: '+err;
         errorEl.style.display = 'block';
-        errorEl.innerText = 'Login failed: ' + err;
     }
 }
 
-// ================= LOGOUT =================
 function logout() {
     auth.signOut();
+    localStorage.removeItem('smartAttendUser');
     currentUser = null;
-    document.getElementById('login-page').style.display = 'block';
     document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('login-page').style.display = 'flex';
 }
 
-// ================= SHOW DASHBOARD =================
+// =================== DASHBOARD ===================
 function showDashboard() {
     document.getElementById('login-page').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
-
-    document.getElementById('user-name').innerText = currentUser.name;
-    document.getElementById('user-email').innerText = currentUser.email;
-    document.getElementById('user-role-header').innerText = currentUser.role.toUpperCase();
-
-    if(currentUser.role === 'student') {
-        document.getElementById('student-attendance').style.display = 'block';
-    }
+    loadAttendanceSummary();
 }
 
-// ================= MARK ATTENDANCE =================
+// =================== ATTENDANCE ===================
 async function markAttendance() {
-    const statusEl = document.getElementById('attendance-status');
-    if(currentUser.role !== 'student') {
-        statusEl.innerText = "Only students can mark attendance";
-        return;
-    }
+    if(currentUser.role !== 'student') { alert('Only students can mark attendance'); return; }
 
-    const today = new Date().toISOString().split('T')[0];
-    const session = "morning"; // or "afternoon" based on your logic
+    const now = new Date();
+    const date = now.toISOString().split('T')[0];
+    const session = now.getHours() < 12 ? 'morning' : 'afternoon';
+    const statusEl = document.getElementById('attendance-status');
+    const attendanceRef = db.collection('attendance').doc(currentUser.uid).collection('records');
 
     try {
-        const attendanceRef = db.collection('attendance').doc(currentUser.uid).collection('records');
+        const snapshot = await attendanceRef.where('date','==',date).where('session','==',session).get();
+        if(!snapshot.empty) { statusEl.innerText = 'Already marked this session'; return; }
 
-        // Check if already marked today for this session
-        const snapshot = await attendanceRef
-            .where('date','==',today)
-            .where('session','==',session)
-            .get();
+        navigator.geolocation.getCurrentPosition(async (pos)=>{
+            const geo = new firebase.firestore.GeoPoint(pos.coords.latitude,pos.coords.longitude);
+            await attendanceRef.add({
+                date, session, status:'present', timestamp: firebase.firestore.FieldValue.serverTimestamp(), location: geo
+            });
+            statusEl.innerText = '✅ Attendance marked!';
+            loadAttendanceSummary();
+        }, err => { alert('Geolocation error'); console.error(err); });
 
-        if(!snapshot.empty) {
-            statusEl.innerText = "Attendance already marked for " + session;
-            return;
-        }
+    } catch(err) { console.error(err); statusEl.innerText='❌ Failed to mark attendance'; }
+}
 
-        await attendanceRef.add({
-            date: today,
-            session: session,
-            status: "present",
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            location: new firebase.firestore.GeoPoint(12.9716,77.5946) // Example coordinates
-        });
+// =================== ATTENDANCE SUMMARY ===================
+async function loadAttendanceSummary() {
+    if(currentUser.role !== 'student') return;
 
-        statusEl.innerText = "Attendance marked successfully!";
-    } catch(err) {
-        console.error(err);
-        statusEl.innerText = "Error marking attendance: " + err;
-    }
+    const summaryEl = document.getElementById('attendance-summary');
+    const attendanceRef = db.collection('attendance').doc(currentUser.uid).collection('records');
+    const snapshot = await attendanceRef.get();
+
+    const totalClasses = snapshot.size;
+    const presentCount = snapshot.docs.filter(d=>d.data().status==='present').length;
+    const percentage = totalClasses ? ((presentCount/totalClasses)*100).toFixed(1) : 0;
+
+    summaryEl.innerHTML = `
+        <p>Total Classes: ${totalClasses}</p>
+        <p>Present: ${presentCount}</p>
+        <p>Percentage: ${percentage}%</p>
+    `;
 }
