@@ -20,29 +20,26 @@
 </head>
 <body>
 
-<!-- Login Page -->
+<!-- LOGIN PAGE -->
 <div id="login-page">
   <div class="login-card">
     <h2>Smart Attend+</h2>
     <p class="sub">Fair • Transparent • Stress-Free</p>
-
     <input id="email" type="email" placeholder="College Email" required>
     <input id="password" type="password" placeholder="Password" required>
     <select id="role">
       <option value="student">Student</option>
       <option value="teacher">Teacher</option>
     </select>
-
-    <div class="spinner" id="login-spinner"></div>
     <button onclick="login()">Login</button>
-    <p id="login-error" style="color: red; display: none;"></p>
+    <p id="login-error" style="color:red; display:none;"></p>
   </div>
 </div>
 
-<!-- Dashboard -->
-<div id="dashboard">
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none;">
   <header>
-    🌸 Smart Attendance & Wellness Portal
+    <span id="header-text">🌸 Smart Attendance & Wellness Portal</span>
     <button onclick="logout()" class="logout-btn">Logout</button>
   </header>
 
@@ -60,7 +57,8 @@
   </div>
 
   <div class="dashboard-grid">
-    <!-- Student Attendance -->
+
+    <!-- Student Cards -->
     <div class="card">
       <h3>📷 Mark Attendance</h3>
       <button onclick="markAttendance()">Scan QR & Mark</button>
@@ -69,7 +67,7 @@
 
     <div class="card">
       <h3>📊 Attendance Prediction</h3>
-      <button onclick="getPrediction()">Predict Attendance Risk</button>
+      <button onclick="attendancePrediction()">Predict Attendance Risk</button>
       <p id="prediction"></p>
     </div>
 
@@ -81,7 +79,7 @@
 
     <div class="card">
       <h3>🧾 Audit Logs</h3>
-      <div id="chart_div" style="height: 250px;"></div>
+      <div id="chart_div" style="height:250px;"></div>
     </div>
 
     <div class="card">
@@ -94,21 +92,22 @@
       <div id="todays-classes"></div>
     </div>
 
-    <!-- Project Work for Student -->
+    <!-- Student Project -->
     <div class="card" id="student-project-card">
       <h3>📂 Project Work</h3>
       <button onclick="submitProjectWork()">Submit Project Work</button>
     </div>
 
-    <!-- Teacher Project View -->
+    <!-- Teacher Project -->
     <div class="card" id="teacher-projects-card">
       <h3>📁 Project Submissions</h3>
       <div id="project-submissions"></div>
     </div>
+
   </div>
 </div>
 
-<!-- Firebase Config -->
+<!-- FIREBASE CONFIG -->
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
@@ -119,8 +118,11 @@
     appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
   };
   firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 </script>
 
 <script src="app.js"></script>
+
 </body>
 </html>
