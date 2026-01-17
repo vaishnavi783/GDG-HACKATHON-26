@@ -16,20 +16,29 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-  <!-- Your existing CSS -->
   <link rel="stylesheet" href="style.css">
 
+  <style>
+    /* Spinner, Project Card, etc. */
+    .spinner { display:none; border:4px solid rgba(0,0,0,0.1); border-radius:50%; border-top:4px solid #3498db; width:40px; height:40px; animation:spin 1s linear infinite; margin:20px auto; }
+    @keyframes spin {0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+    #teacher-projects-card, #student-project-card { display:none; margin-top:20px; }
+    .project-item{padding:10px;border:1px solid #eee;border-radius:5px;margin:8px 0;display:flex;justify-content:space-between;align-items:center;gap:5px;}
+    .project-item button{padding:5px 10px;border:none;border-radius:4px;cursor:pointer;font-size:12px;}
+    .project-item button:first-child{background:#2ecc71;color:white;}
+    .project-item button:nth-child(2){background:#e74c3c;color:white;}
+  </style>
 </head>
-<body>
 
+<body>
 <!-- ================= LOGIN PAGE ================= -->
 <div id="login-page">
-  <div class="login-card card">
+  <div class="card login-card">
     <h2>Smart Attend+</h2>
     <p class="sub">Fair • Transparent • Stress-Free</p>
 
-    <input id="email" type="email" placeholder="College Email">
-    <input id="password" type="password" placeholder="Password">
+    <input id="email" type="email" placeholder="College Email" required>
+    <input id="password" type="password" placeholder="Password" required>
 
     <select id="role">
       <option value="student">Student</option>
@@ -38,7 +47,7 @@
 
     <div class="spinner" id="login-spinner"></div>
     <button onclick="login()">Login</button>
-    <p id="login-error" style="color:red; display:none;"></p>
+    <p id="login-error" style="color:red;display:none;"></p>
   </div>
 </div>
 
@@ -49,7 +58,6 @@
     <button onclick="logout()" class="logout-btn">Logout</button>
   </header>
 
-  <!-- Date & User Info -->
   <div class="motivation-bar">
     <div class="datetime">
       <span id="date"></span> • <span id="time"></span>
@@ -59,58 +67,51 @@
     </div>
   </div>
 
-  <!-- Quote -->
   <div class="motivation-bar">
     <p id="quoteText"></p>
   </div>
 
-  <!-- Dashboard Cards -->
   <div class="dashboard-grid">
 
     <!-- Student Cards -->
     <div class="card">
       <h3>📷 Mark Attendance</h3>
-      <button onclick="markAttendance()">Scan QR & Mark</button>
+      <button onclick="markAttendance('morning')">Scan QR - Morning</button>
+      <button onclick="markAttendance('afternoon')">Scan QR - Afternoon</button>
       <p id="status"></p>
     </div>
 
     <div class="card">
       <h3>📊 Attendance Prediction</h3>
-      <button onclick="getPrediction()">Predict Attendance Risk</button>
+      <button onclick="showAttendancePrediction()">Predict Attendance Risk</button>
       <p id="prediction"></p>
     </div>
 
     <div class="card">
       <h3>🔐 One-Time Correction</h3>
-      <button onclick="requestCorrection()">Request Correction</button>
-      <p id="correctionStatus"></p>
+      <button onclick="promptCorrection()">Request Correction</button>
+      <div id="correction-requests"></div>
     </div>
 
     <div class="card">
       <h3>🧾 Audit Logs</h3>
-      <div id="chart_div"></div>
+      <div id="chart_div" style="height:250px;"></div>
     </div>
 
     <div class="card">
       <h3>📈 Attendance Summary</h3>
-      <div id="attendance-summary">
-        <p>Total Classes: <span id="total-classes">0</span></p>
-        <p>Present: <span id="present-count">0</span></p>
-        <p>Percentage: <span id="attendance-percentage">0%</span></p>
-      </div>
+      <div id="attendance-summary"></div>
     </div>
 
     <div class="card">
       <h3>🎯 Today's Classes</h3>
-      <div id="todays-classes">
-        <p>No classes scheduled for today</p>
-      </div>
+      <div id="todays-classes"></div>
     </div>
 
-    <!-- Project Work Card for Students -->
+    <!-- Project Work -->
     <div class="card" id="student-project-card">
       <h3>📂 Project Work</h3>
-      <button onclick="submitProjectWork()">Submit Project Work</button>
+      <button onclick="submitProjectPrompt()">Submit Project Work</button>
     </div>
 
     <!-- Teacher Project View -->
@@ -133,7 +134,6 @@
     appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
   };
 
-  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
@@ -141,6 +141,5 @@
 
 <!-- ================= MAIN JS ================= -->
 <script src="app.js"></script>
-
 </body>
 </html>
