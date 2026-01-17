@@ -1,32 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Attend+</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Attend+</title>
 
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
 
-  <!-- Google Charts -->
-  <script src="https://www.gstatic.com/charts/loader.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
-  <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- LOGIN PAGE -->
+<!-- LOGIN -->
 <div id="login-page">
   <div class="login-card">
     <h2>Smart Attend+</h2>
-    <p class="sub">Fair • Transparent • Stress-Free</p>
-    <input id="email" type="email" placeholder="College Email" required>
-    <input id="password" type="password" placeholder="Password" required>
+    <input id="email" type="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
     <select id="role">
       <option value="student">Student</option>
       <option value="teacher">Teacher</option>
@@ -39,90 +35,22 @@
 <!-- DASHBOARD -->
 <div id="dashboard" style="display:none;">
   <header>
-    <span id="header-text">🌸 Smart Attendance & Wellness Portal</span>
+    Smart Attend+ | <span id="user-role-header"></span>
     <button onclick="logout()" class="logout-btn">Logout</button>
   </header>
 
-  <div class="motivation-bar">
-    <div class="datetime">
-      <span id="date"></span> • <span id="time"></span>
-    </div>
-    <div class="user-info">
-      <span id="user-email"></span> | <span id="user-role"></span>
-    </div>
+  <div>
+    <p>Welcome, <span id="user-name"></span></p>
+    <p>Email: <span id="user-email"></span></p>
   </div>
 
-  <div class="motivation-bar">
-    <p id="quoteText"></p>
-  </div>
-
-  <div class="dashboard-grid">
-
-    <!-- Student Cards -->
-    <div class="card">
-      <h3>📷 Mark Attendance</h3>
-      <button onclick="markAttendance()">Scan QR & Mark</button>
-      <p id="status"></p>
-    </div>
-
-    <div class="card">
-      <h3>📊 Attendance Prediction</h3>
-      <button onclick="attendancePrediction()">Predict Attendance Risk</button>
-      <p id="prediction"></p>
-    </div>
-
-    <div class="card">
-      <h3>🔐 One-Time Correction</h3>
-      <button onclick="requestCorrection()">Request Correction</button>
-      <p id="correctionStatus"></p>
-    </div>
-
-    <div class="card">
-      <h3>🧾 Audit Logs</h3>
-      <div id="chart_div" style="height:250px;"></div>
-    </div>
-
-    <div class="card">
-      <h3>📈 Attendance Summary</h3>
-      <div id="attendance-summary"></div>
-    </div>
-
-    <div class="card">
-      <h3>🎯 Today's Classes</h3>
-      <div id="todays-classes"></div>
-    </div>
-
-    <!-- Student Project -->
-    <div class="card" id="student-project-card">
-      <h3>📂 Project Work</h3>
-      <button onclick="submitProjectWork()">Submit Project Work</button>
-    </div>
-
-    <!-- Teacher Project -->
-    <div class="card" id="teacher-projects-card">
-      <h3>📁 Project Submissions</h3>
-      <div id="project-submissions"></div>
-    </div>
-
+  <div id="student-attendance" style="display:none;">
+    <h3>Mark Attendance</h3>
+    <button onclick="markAttendance()">Scan QR & Mark</button>
+    <p id="attendance-status"></p>
   </div>
 </div>
 
-<!-- FIREBASE CONFIG -->
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-    authDomain: "attendx-6be15.firebaseapp.com",
-    projectId: "attendx-6be15",
-    storageBucket: "attendx-6be15.appspot.com",
-    messagingSenderId: "593387890331",
-    appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.firestore();
-</script>
-
 <script src="app.js"></script>
-
 </body>
 </html>
