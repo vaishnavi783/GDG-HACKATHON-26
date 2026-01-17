@@ -16,14 +16,13 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-  <!-- Your existing CSS -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- LOGIN PAGE -->
+<!-- ================= LOGIN PAGE ================= -->
 <div id="login-page">
-  <div class="login-card">
+  <div class="card login-card">
     <h2>Smart Attend+</h2>
     <p class="sub">Fair • Transparent • Stress-Free</p>
 
@@ -37,36 +36,45 @@
 
     <div class="spinner" id="login-spinner"></div>
     <button onclick="login()">Login</button>
-    <p id="login-error" style="color:red; display:none;"></p>
+    <p id="login-error" style="color: red; display: none;"></p>
   </div>
 </div>
 
-<!-- DASHBOARD -->
+<!-- ================= DASHBOARD ================= -->
 <div id="dashboard">
   <header>
     🌸 Smart Attendance & Wellness Portal
     <button onclick="logout()" class="logout-btn">Logout</button>
   </header>
 
+  <!-- Date & User Info -->
   <div class="motivation-bar">
-    <div class="datetime"><span id="date"></span> • <span id="time"></span></div>
-    <div class="user-info"><span id="user-email"></span> | <span id="user-role"></span></div>
+    <div class="datetime">
+      <span id="date"></span> • <span id="time"></span>
+    </div>
+    <div class="user-info">
+      <span id="user-email"></span> | <span id="user-role"></span>
+    </div>
   </div>
 
+  <!-- Quote -->
   <div class="motivation-bar">
     <p id="quoteText"></p>
   </div>
 
+  <!-- Dashboard Cards -->
   <div class="dashboard-grid">
+
+    <!-- Student Cards -->
     <div class="card">
-      <h3>📷 Scan QR & Mark Attendance</h3>
-      <button onclick="markAttendance()">Mark Attendance</button>
+      <h3>📷 Mark Attendance</h3>
+      <button onclick="markAttendance()">Scan QR & Mark</button>
       <p id="status"></p>
     </div>
 
     <div class="card">
       <h3>📊 Attendance Prediction</h3>
-      <button onclick="getPrediction()">Predict Risk</button>
+      <button onclick="getPrediction()">Predict Attendance Risk</button>
       <p id="prediction"></p>
     </div>
 
@@ -78,46 +86,58 @@
 
     <div class="card">
       <h3>🧾 Audit Logs</h3>
-      <div id="chart_div"></div>
+      <div id="chart_div" style="height: 250px;"></div>
     </div>
 
     <div class="card">
       <h3>📈 Attendance Summary</h3>
-      <div id="attendance-summary"></div>
+      <div id="attendance-summary">
+        <p>Total Classes: <span id="total-classes">0</span></p>
+        <p>Present: <span id="present-count">0</span></p>
+        <p>Percentage: <span id="attendance-percentage">0%</span></p>
+      </div>
     </div>
 
     <div class="card">
       <h3>🎯 Today's Classes</h3>
-      <div id="todays-classes"></div>
+      <div id="todays-classes">
+        <p>No classes scheduled for today</p>
+      </div>
     </div>
 
+    <!-- Project Work Card for Students -->
     <div class="card" id="student-project-card">
       <h3>📂 Project Work</h3>
-      <button onclick="submitProjectWork()">Submit Project</button>
+      <button onclick="submitProjectWork()">Submit Project Work</button>
     </div>
 
+    <!-- Teacher Project View -->
     <div class="card" id="teacher-projects-card">
       <h3>📁 Project Submissions</h3>
       <div id="project-submissions"></div>
     </div>
+
   </div>
 </div>
 
-<!-- FIREBASE CONFIG -->
+<!-- ================= FIREBASE CONFIG ================= -->
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-  authDomain: "attendx-6be15.firebaseapp.com",
-  projectId: "attendx-6be15",
-  storageBucket: "attendx-6be15.firebasestorage.app",
-  messagingSenderId: "593387890331",
-  appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+  const firebaseConfig = {
+    apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
+    authDomain: "attendx-6be15.firebaseapp.com",
+    projectId: "attendx-6be15",
+    storageBucket: "attendx-6be15.appspot.com",
+    messagingSenderId: "593387890331",
+    appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 </script>
 
+<!-- ================= MAIN JS ================= -->
 <script src="app.js"></script>
+
 </body>
 </html>
