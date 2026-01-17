@@ -1,19 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Smart Attend+</title>
-
-<!-- Google Fonts -->
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
-
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Attend+ Login & Attendance</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -21,8 +16,8 @@
 <div id="login-page">
   <div class="login-card">
     <h2>Smart Attend+</h2>
-    <input id="email" type="email" placeholder="Email">
-    <input id="password" type="password" placeholder="Password">
+    <input type="email" id="email" placeholder="College Email" required>
+    <input type="password" id="password" placeholder="Password" required>
     <select id="role">
       <option value="student">Student</option>
       <option value="teacher">Teacher</option>
@@ -35,22 +30,28 @@
 <!-- DASHBOARD -->
 <div id="dashboard" style="display:none;">
   <header>
-    Smart Attend+ | <span id="user-role-header"></span>
+    🌸 Smart Attendance Portal
     <button onclick="logout()" class="logout-btn">Logout</button>
   </header>
 
-  <div>
-    <p>Welcome, <span id="user-name"></span></p>
-    <p>Email: <span id="user-email"></span></p>
-  </div>
+  <div class="dashboard-grid">
+    <div class="card" id="attendance-card">
+      <h3>📷 Mark Attendance</h3>
+      <button onclick="markAttendance()">Scan QR & Mark</button>
+      <p id="attendance-status"></p>
+    </div>
 
-  <div id="student-attendance" style="display:none;">
-    <h3>Mark Attendance</h3>
-    <button onclick="markAttendance()">Scan QR & Mark</button>
-    <p id="attendance-status"></p>
+    <div class="card" id="attendance-summary-card">
+      <h3>📈 Attendance Summary</h3>
+      <div id="attendance-summary">
+        <p>Total Classes: <span id="total-classes">0</span></p>
+        <p>Present: <span id="present-count">0</span></p>
+        <p>Percentage: <span id="attendance-percentage">0%</span></p>
+      </div>
+    </div>
   </div>
 </div>
 
-<script src="app.js"></script>
+<script src="attendance.js"></script>
 </body>
 </html>
