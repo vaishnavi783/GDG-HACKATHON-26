@@ -25,8 +25,7 @@ function getRandomQuote() {
 async function login() {
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
-  const role = document.getElementById('role').value;
-
+  const roleSelected = document.getElementById('role').value.toLowerCase();
   const errorElement = document.getElementById('login-error');
   errorElement.style.display = 'none';
 
@@ -37,21 +36,25 @@ async function login() {
   }
 
   try {
+    // Sign in with Firebase Auth
     const userCredential = await auth.signInWithEmailAndPassword(email, password);
     const uid = userCredential.user.uid;
 
-    const doc = await db.collection('users').doc(uid).get();
-    if (!doc.exists) throw new Error("User data not found");
-    const data = doc.data();
-    if (data.role !== role) throw new Error("Role mismatch!");
+    // Get user from Firestore
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) throw new Error("User not found in Firestore");
 
-    currentUser = { uid, ...data };
+    const userData = userDoc.data();
+    const userRole = (userData.role || "").toLowerCase();
+    if (userRole !== roleSelected) throw new Error(`Role mismatch!`);
+
+    currentUser = { uid, ...userData };
     localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
 
     showDashboard();
   } catch (err) {
     console.error(err);
-    errorElement.innerText = "Login failed: " + err.message;
+    errorElement.innerText = "Login failed: " + (err.message || err);
     errorElement.style.display = 'block';
   }
 }
@@ -69,7 +72,7 @@ function logout() {
 function showDashboard() {
   document.getElementById('login-page').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  
+
   // Date & Time
   const now = new Date();
   document.getElementById('date').innerText = now.toDateString();
@@ -78,7 +81,7 @@ function showDashboard() {
   // User Info
   document.getElementById('user-email').innerText = currentUser.email;
   document.getElementById('user-role').innerText = currentUser.role;
-  
+
   // Quote
   document.getElementById('quoteText').innerText = getRandomQuote();
 
@@ -94,18 +97,12 @@ async function loadTodaysClasses() {
   container.innerHTML = '';
 
   if (currentUser.role === 'student') {
-    // Fetch classes of student's department/year
     const snapshot = await db.collection('classes')
       .where('department','==',currentUser.department)
       .where('year','==',currentUser.year).get();
 
-    const todayClasses = snapshot.docs.filter(doc => {
-      const data = doc.data();
-      return true; // for now show all classes
-    });
-
-    if (todayClasses.length === 0) container.innerHTML = '<p>No classes today</p>';
-    else todayClasses.forEach(doc=>{
+    if (snapshot.empty) container.innerHTML = '<p>No classes today</p>';
+    snapshot.docs.forEach(doc=>{
       const c = doc.data();
       container.innerHTML += `<p>${c.className} (${c.startTime}-${c.endTime})</p>`;
     });
@@ -129,8 +126,8 @@ async function markAttendance() {
     return;
   }
 
-  // 1. Get today's QR session
   const today = formatDate(new Date());
+
   const qrSnapshot = await db.collection('qr_sessions')
     .where('active','==',true)
     .get();
@@ -140,7 +137,6 @@ async function markAttendance() {
     return;
   }
 
-  // 2. Geo-location
   navigator.geolocation.getCurrentPosition(async pos=>{
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
@@ -154,7 +150,6 @@ async function markAttendance() {
       return;
     }
 
-    // 3. Mark attendance
     const qrDoc = qrSnapshot.docs[0];
     const sessionId = qrDoc.id;
     const classId = qrDoc.data().classId;
@@ -168,7 +163,6 @@ async function markAttendance() {
         approved: false
       });
 
-    // Log audit
     await db.collection('audit_logs').add({
       userId: currentUser.uid,
       role: 'student',
@@ -186,25 +180,25 @@ async function markAttendance() {
 
 // ================== ATTENDANCE SUMMARY ==================
 async function loadAttendanceSummary() {
+  if (currentUser.role !== 'student') return;
+
   const totalElem = document.getElementById('total-classes');
   const presentElem = document.getElementById('present-count');
   const percElem = document.getElementById('attendance-percentage');
 
-  if (currentUser.role !== 'student') {
-    totalElem.innerText = '-';
-    presentElem.innerText = '-';
-    percElem.innerText = '-';
-    return;
-  }
-
   const snapshot = await db.collectionGroup('attendance')
-    .where(firebase.firestore.FieldPath.documentId(),'==',currentUser.uid)
     .get();
 
-  const total = snapshot.docs.length;
-  const present = snapshot.docs.filter(d=>d.data().status==='present').length;
-  const perc = total === 0 ? 0 : Math.round((present/total)*100);
+  let total=0, present=0;
+  snapshot.docs.forEach(d=>{
+    const data = d.data();
+    if(d.id === currentUser.uid){
+      total++;
+      if(data.status==='present') present++;
+    }
+  });
 
+  const perc = total===0?0:Math.round((present/total)*100);
   totalElem.innerText = total;
   presentElem.innerText = present;
   percElem.innerText = perc + '%';
