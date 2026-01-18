@@ -1,57 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Attend+ Login & Attendance</title>
-  <link rel="stylesheet" href="style.css">
-  <!-- Firebase -->
+  <title>Smart Attendance System</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="login-page">
-  <div class="login-card">
-    <h2>Smart Attend+</h2>
-    <input type="email" id="email" placeholder="College Email" required>
-    <input type="password" id="password" placeholder="Password" required>
-    <select id="role">
-      <option value="student">Student</option>
-      <option value="teacher">Teacher</option>
-    </select>
-    <button onclick="login()">Login</button>
-    <p id="login-error" style="color:red; display:none;"></p>
-  </div>
+<h2>Smart Attendance System</h2>
+
+<!-- ---------------- Login ---------------- -->
+<div id="loginBox">
+  <label>Email:</label>
+  <input type="email" id="email" placeholder="Email" />
+  <br><br>
+  <label>Password:</label>
+  <input type="password" id="password" placeholder="Password" />
+  <br><br>
+  <button onclick="login()">Login</button>
 </div>
 
-<!-- DASHBOARD -->
-<div id="dashboard" style="display:none;">
-  <header>
-    🌸 Smart Attendance Portal
-    <button onclick="logout()" class="logout-btn">Logout</button>
-  </header>
+<!-- ---------------- Student Dashboard ---------------- -->
+<div id="studentDashboard" class="hidden">
+  <h3>Student Dashboard</h3>
+  <p id="studentName"></p>
 
-  <div class="dashboard-grid">
-    <div class="card" id="attendance-card">
-      <h3>📷 Mark Attendance</h3>
-      <button onclick="markAttendance()">Scan QR & Mark</button>
-      <p id="attendance-status"></p>
-    </div>
+  <h4>Mark Attendance</h4>
+  <button onclick="markAttendance()">Mark Attendance</button>
 
-    <div class="card" id="attendance-summary-card">
-      <h3>📈 Attendance Summary</h3>
-      <div id="attendance-summary">
-        <p>Total Classes: <span id="total-classes">0</span></p>
-        <p>Present: <span id="present-count">0</span></p>
-        <p>Percentage: <span id="attendance-percentage">0%</span></p>
-      </div>
-    </div>
-  </div>
+  <h4>Request Correction</h4>
+  <input id="reason" placeholder="Reason for correction" />
+  <button onclick="requestCorrection()">Submit Correction</button>
+
+  <h4>Attendance History</h4>
+  <div id="history"></div>
 </div>
 
-<script src="attendance.js"></script>
+<!-- ---------------- Teacher Dashboard ---------------- -->
+<div id="teacherDashboard" class="hidden">
+  <h3>Teacher Dashboard</h3>
+  <p id="teacherName"></p>
+
+  <h4>Pending Corrections</h4>
+  <div id="corrections"></div>
+
+  <h4>Audit Logs (Recent)</h4>
+  <div id="auditLogs"></div>
+
+  <h4>QR Session</h4>
+  <button onclick="createQRSession()">Generate QR Session</button>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
