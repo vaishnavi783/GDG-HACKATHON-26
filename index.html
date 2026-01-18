@@ -25,14 +25,12 @@
 <div id="studentDashboard" class="hidden card">
   <h2 id="studentName"></h2>
 
-  <!-- Tabs -->
   <div class="tabs">
-    <button class="tabBtn active" onclick="openTab('todayClass', 'student')">Today's Class</button>
-    <button class="tabBtn" onclick="openTab('attendanceHistory', 'student')">Attendance History</button>
-    <button class="tabBtn" onclick="openTab('requestCorrection', 'student')">Request Correction</button>
+    <button class="tabBtn active" onclick="openTab('todayClass', 'student', event)">Today's Class</button>
+    <button class="tabBtn" onclick="openTab('attendanceHistory', 'student', event)">Attendance History</button>
+    <button class="tabBtn" onclick="openTab('requestCorrection', 'student', event)">Request Correction</button>
   </div>
 
-  <!-- Tab Contents -->
   <div id="todayClass" class="tabContent student">
     <h3>Today's Class</h3>
     <button onclick="markAttendance()">Mark Attendance</button>
@@ -54,14 +52,12 @@
 <div id="teacherDashboard" class="hidden card">
   <h2 id="teacherName"></h2>
 
-  <!-- Tabs -->
   <div class="tabs">
-    <button class="tabBtn active" onclick="openTab('pendingCorrections', 'teacher')">Pending Corrections</button>
-    <button class="tabBtn" onclick="openTab('auditLogs', 'teacher')">Audit Logs</button>
-    <button class="tabBtn" onclick="openTab('qrSession', 'teacher')">QR Session</button>
+    <button class="tabBtn active" onclick="openTab('pendingCorrections', 'teacher', event)">Pending Corrections</button>
+    <button class="tabBtn" onclick="openTab('auditLogs', 'teacher', event)">Audit Logs</button>
+    <button class="tabBtn" onclick="openTab('qrSession', 'teacher', event)">QR Session</button>
   </div>
 
-  <!-- Tab Contents -->
   <div id="pendingCorrections" class="tabContent teacher">
     <div id="corrections"></div>
   </div>
