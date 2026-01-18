@@ -1,101 +1,212 @@
-// =================== FIREBASE CONFIG ===================
+// ---------------- Firebase Init ----------------
 const firebaseConfig = {
-    apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-    authDomain: "attendx-6be15.firebaseapp.com",
-    projectId: "attendx-6be15",
-    storageBucket: "attendx-6be15.firebasestorage.app",
-    messagingSenderId: "593387890331",
-    appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
+  apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
+  authDomain: "attendx-6be15.firebaseapp.com",
+  projectId: "attendx-6be15",
+  storageBucket: "attendx-6be15.appspot.com",
+  messagingSenderId: "593387890331",
+  appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
 };
-
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
-
 let currentUser = null;
 
-// =================== LOGIN ===================
-async function login() {
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const role = document.getElementById('role').value;
-    const errorEl = document.getElementById('login-error');
-    errorEl.style.display = 'none';
+// ---------------- Login ----------------
+function login() {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
 
-    try {
-        const userCredential = await auth.signInWithEmailAndPassword(email, password);
-        const uid = userCredential.user.uid;
-
-        const userDoc = await db.collection('users').doc(uid).get();
-        if(!userDoc.exists) throw 'User not found';
-        const userData = userDoc.data();
-        if(userData.role !== role) throw 'Role mismatch';
-
-        currentUser = { uid, ...userData };
-        localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
-        showDashboard();
-    } catch(err) {
-        errorEl.innerText = 'Login failed: '+err;
-        errorEl.style.display = 'block';
-    }
+  auth.signInWithEmailAndPassword(email, password)
+    .then(userCredential => {
+      currentUser = userCredential.user;
+      db.collection("users").doc(currentUser.uid).get().then(doc => {
+        const role = doc.data().role;
+        if (role === "student") showStudentDashboard(doc.data());
+        else if (role === "teacher") showTeacherDashboard(doc.data());
+      });
+    })
+    .catch(err => alert("Login failed: " + err.message));
 }
 
-function logout() {
-    auth.signOut();
-    localStorage.removeItem('smartAttendUser');
-    currentUser = null;
-    document.getElementById('dashboard').style.display = 'none';
-    document.getElementById('login-page').style.display = 'flex';
+// ---------------- Student Dashboard ----------------
+function showStudentDashboard(user) {
+  document.getElementById("loginBox").classList.add("hidden");
+  document.getElementById("studentDashboard").classList.remove("hidden");
+  document.getElementById("studentName").innerText = `Welcome ${user.name}`;
+  loadAttendanceHistory();
 }
 
-// =================== DASHBOARD ===================
-function showDashboard() {
-    document.getElementById('login-page').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-    loadAttendanceSummary();
-}
-
-// =================== ATTENDANCE ===================
 async function markAttendance() {
-    if(currentUser.role !== 'student') { alert('Only students can mark attendance'); return; }
+  // 1️⃣ Get student location
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
 
-    const now = new Date();
-    const date = now.toISOString().split('T')[0];
-    const session = now.getHours() < 12 ? 'morning' : 'afternoon';
-    const statusEl = document.getElementById('attendance-status');
-    const attendanceRef = db.collection('attendance').doc(currentUser.uid).collection('records');
+    // 2️⃣ Get geo fence
+    const geoSnap = await db.collection("geo_fences").doc("college").get();
+    const geo = geoSnap.data();
+    const distance = getDistance(lat, lon, geo.latitude, geo.longitude);
+    const insideCollege = distance <= geo.radius;
 
-    try {
-        const snapshot = await attendanceRef.where('date','==',date).where('session','==',session).get();
-        if(!snapshot.empty) { statusEl.innerText = 'Already marked this session'; return; }
+    if (!insideCollege) return alert("You are outside the allowed area. Attendance not marked.");
 
-        navigator.geolocation.getCurrentPosition(async (pos)=>{
-            const geo = new firebase.firestore.GeoPoint(pos.coords.latitude,pos.coords.longitude);
-            await attendanceRef.add({
-                date, session, status:'present', timestamp: firebase.firestore.FieldValue.serverTimestamp(), location: geo
-            });
-            statusEl.innerText = '✅ Attendance marked!';
-            loadAttendanceSummary();
-        }, err => { alert('Geolocation error'); console.error(err); });
+    // 3️⃣ Get today date and mark attendance
+    const today = new Date().toISOString().split("T")[0];
+    const classId = "DBMS"; // Example
+    await db.collection("attendance").doc(classId)
+      .collection(today)
+      .doc(currentUser.uid)
+      .set({
+        status: "present",
+        markedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        locationVerified: insideCollege,
+        qrVerified: false, // QR code verification can be added separately
+        approved: false
+      });
 
-    } catch(err) { console.error(err); statusEl.innerText='❌ Failed to mark attendance'; }
+    // 4️⃣ Add audit log
+    await db.collection("audit_logs").add({
+      userId: currentUser.uid,
+      action: "ATTENDANCE_MARKED",
+      role: "student",
+      details: "Geo verified",
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    alert("Attendance marked successfully!");
+    loadAttendanceHistory();
+  });
 }
 
-// =================== ATTENDANCE SUMMARY ===================
-async function loadAttendanceSummary() {
-    if(currentUser.role !== 'student') return;
+// Haversine formula for distance in meters
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // meters
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
 
-    const summaryEl = document.getElementById('attendance-summary');
-    const attendanceRef = db.collection('attendance').doc(currentUser.uid).collection('records');
-    const snapshot = await attendanceRef.get();
+// Attendance history
+async function loadAttendanceHistory() {
+  const today = new Date().toISOString().split("T")[0];
+  const classId = "DBMS";
+  const historyDiv = document.getElementById("history");
+  historyDiv.innerHTML = "";
 
-    const totalClasses = snapshot.size;
-    const presentCount = snapshot.docs.filter(d=>d.data().status==='present').length;
-    const percentage = totalClasses ? ((presentCount/totalClasses)*100).toFixed(1) : 0;
+  const snapshot = await db.collection("attendance").doc(classId)
+    .collection(today)
+    .doc(currentUser.uid)
+    .get();
 
-    summaryEl.innerHTML = `
-        <p>Total Classes: ${totalClasses}</p>
-        <p>Present: ${presentCount}</p>
-        <p>Percentage: ${percentage}%</p>
+  if (snapshot.exists) {
+    const data = snapshot.data();
+    historyDiv.innerText = `${today}: ${data.status} (Approved: ${data.approved})`;
+  } else {
+    historyDiv.innerText = "No attendance yet today.";
+  }
+}
+
+// Request correction
+async function requestCorrection() {
+  const reason = document.getElementById("reason").value;
+  const today = new Date().toISOString().split("T")[0];
+  const classId = "DBMS";
+
+  await db.collection("corrections").add({
+    studentId: currentUser.uid,
+    classId,
+    date: today,
+    reason,
+    status: "pending",
+    requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    reviewedBy: ""
+  });
+
+  alert("Correction requested!");
+  document.getElementById("reason").value = "";
+}
+
+// ---------------- Teacher Dashboard ----------------
+function showTeacherDashboard(user) {
+  document.getElementById("loginBox").classList.add("hidden");
+  document.getElementById("teacherDashboard").classList.remove("hidden");
+  document.getElementById("teacherName").innerText = `Welcome ${user.name}`;
+  loadCorrections();
+  loadAuditLogs();
+}
+
+// Load pending corrections
+async function loadCorrections() {
+  const snapshot = await db.collection("corrections").where("status", "==", "pending").get();
+  const div = document.getElementById("corrections");
+  div.innerHTML = "";
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const el = document.createElement("div");
+    el.innerHTML = `
+      ${data.studentId} - ${data.date} - ${data.reason} 
+      <button onclick="approveCorrection('${doc.id}', '${data.studentId}', '${data.classId}', '${data.date}')">Approve</button>
+      <button onclick="rejectCorrection('${doc.id}')">Reject</button>
     `;
+    div.appendChild(el);
+  });
+}
+
+// Approve correction
+async function approveCorrection(docId, studentId, classId, date) {
+  await db.collection("corrections").doc(docId).update({
+    status: "approved",
+    reviewedBy: currentUser.uid
+  });
+  await db.collection("attendance").doc(classId).collection(date).doc(studentId).update({
+    status: "present",
+    approved: true
+  });
+  alert("Correction approved!");
+  loadCorrections();
+  loadAuditLogs();
+}
+
+// Reject correction
+async function rejectCorrection(docId) {
+  await db.collection("corrections").doc(docId).update({
+    status: "rejected",
+    reviewedBy: currentUser.uid
+  });
+  alert("Correction rejected!");
+  loadCorrections();
+  loadAuditLogs();
+}
+
+// Load audit logs
+async function loadAuditLogs() {
+  const snapshot = await db.collection("audit_logs").orderBy("timestamp", "desc").limit(10).get();
+  const div = document.getElementById("auditLogs");
+  div.innerHTML = "";
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    div.innerHTML += `<p>${data.userId} - ${data.action} - ${data.details}</p>`;
+  });
+}
+
+// ---------------- QR Session ----------------
+async function createQRSession() {
+  const token = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const now = firebase.firestore.Timestamp.now();
+  const tenMinutes = new Date().getTime() + 10*60*1000;
+
+  await db.collection("qr_sessions").add({
+    classId: "DBMS",
+    teacherId: currentUser.uid,
+    qrToken: token,
+    validFrom: now,
+    validTill: firebase.firestore.Timestamp.fromDate(new Date(tenMinutes)),
+    active: true
+  });
+  alert("QR Session generated: " + token);
 }
