@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Attendance System</title>
+  <title>Smart Attendance</title>
   <link rel="stylesheet" href="style.css" />
 
   <!-- Firebase SDK -->
@@ -13,51 +13,68 @@
 </head>
 <body>
 
-<h2>Smart Attendance System</h2>
-
-<!-- ---------------- Login ---------------- -->
-<div id="loginBox">
-  <label>Email:</label>
+<!-- ---------------- Login Card ---------------- -->
+<div id="loginBox" class="card">
+  <h2>Login</h2>
   <input type="email" id="email" placeholder="Email" />
-  <br><br>
-  <label>Password:</label>
   <input type="password" id="password" placeholder="Password" />
-  <br><br>
   <button onclick="login()">Login</button>
 </div>
 
 <!-- ---------------- Student Dashboard ---------------- -->
-<div id="studentDashboard" class="hidden">
-  <h3>Student Dashboard</h3>
-  <p id="studentName"></p>
+<div id="studentDashboard" class="hidden card">
+  <h2 id="studentName"></h2>
 
-  <h4>Mark Attendance</h4>
-  <button onclick="markAttendance()">Mark Attendance</button>
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tabBtn active" onclick="openTab('todayClass', 'student')">Today's Class</button>
+    <button class="tabBtn" onclick="openTab('attendanceHistory', 'student')">Attendance History</button>
+    <button class="tabBtn" onclick="openTab('requestCorrection', 'student')">Request Correction</button>
+  </div>
 
-  <h4>Request Correction</h4>
-  <input id="reason" placeholder="Reason for correction" />
-  <button onclick="requestCorrection()">Submit Correction</button>
+  <!-- Tab Contents -->
+  <div id="todayClass" class="tabContent student">
+    <h3>Today's Class</h3>
+    <button onclick="markAttendance()">Mark Attendance</button>
+  </div>
 
-  <h4>Attendance History</h4>
-  <div id="history"></div>
+  <div id="attendanceHistory" class="tabContent student hidden">
+    <h3>Attendance History</h3>
+    <div id="history"></div>
+  </div>
+
+  <div id="requestCorrection" class="tabContent student hidden">
+    <h3>Request Correction</h3>
+    <input id="reason" placeholder="Reason for correction" />
+    <button onclick="requestCorrection()">Submit Correction</button>
+  </div>
 </div>
 
 <!-- ---------------- Teacher Dashboard ---------------- -->
-<div id="teacherDashboard" class="hidden">
-  <h3>Teacher Dashboard</h3>
-  <p id="teacherName"></p>
+<div id="teacherDashboard" class="hidden card">
+  <h2 id="teacherName"></h2>
 
-  <h4>Pending Corrections</h4>
-  <div id="corrections"></div>
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tabBtn active" onclick="openTab('pendingCorrections', 'teacher')">Pending Corrections</button>
+    <button class="tabBtn" onclick="openTab('auditLogs', 'teacher')">Audit Logs</button>
+    <button class="tabBtn" onclick="openTab('qrSession', 'teacher')">QR Session</button>
+  </div>
 
-  <h4>Audit Logs (Recent)</h4>
-  <div id="auditLogs"></div>
+  <!-- Tab Contents -->
+  <div id="pendingCorrections" class="tabContent teacher">
+    <div id="corrections"></div>
+  </div>
 
-  <h4>QR Session</h4>
-  <button onclick="createQRSession()">Generate QR Session</button>
+  <div id="auditLogs" class="tabContent teacher hidden">
+    <div id="auditLogsDiv"></div>
+  </div>
+
+  <div id="qrSession" class="tabContent teacher hidden">
+    <button onclick="createQRSession()">Generate QR Session</button>
+  </div>
 </div>
 
 <script src="app.js"></script>
 </body>
 </html>
-
