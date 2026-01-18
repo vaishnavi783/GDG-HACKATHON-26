@@ -1,76 +1,138 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Attendance</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Smart Attend+</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+
+  <!-- Google Charts -->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="style.css">
+
 </head>
 <body>
 
-<!-- ---------------- Login Card ---------------- -->
-<div id="loginBox" class="card">
-  <h2>Login</h2>
-  <input type="email" id="email" placeholder="Email" />
-  <input type="password" id="password" placeholder="Password" />
-  <button onclick="login()">Login</button>
-</div>
+<!-- ================= LOGIN PAGE ================= -->
+<div id="login-page">
+  <div class="card login-card">
+    <h2>Smart Attend+</h2>
+    <p class="sub">Fair • Transparent • Stress-Free</p>
 
-<!-- ---------------- Student Dashboard ---------------- -->
-<div id="studentDashboard" class="hidden card">
-  <h2 id="studentName"></h2>
+    <input id="email" type="email" placeholder="College Email" required>
+    <input id="password" type="password" placeholder="Password" required>
 
-  <div class="tabs">
-    <button class="tabBtn active" onclick="openTab('todayClass', 'student', event)">Today's Class</button>
-    <button class="tabBtn" onclick="openTab('attendanceHistory', 'student', event)">Attendance History</button>
-    <button class="tabBtn" onclick="openTab('requestCorrection', 'student', event)">Request Correction</button>
-  </div>
+    <select id="role">
+      <option value="student">Student</option>
+      <option value="teacher">Teacher</option>
+    </select>
 
-  <div id="todayClass" class="tabContent student">
-    <h3>Today's Class</h3>
-    <button onclick="markAttendance()">Mark Attendance</button>
-  </div>
-
-  <div id="attendanceHistory" class="tabContent student hidden">
-    <h3>Attendance History</h3>
-    <div id="history"></div>
-  </div>
-
-  <div id="requestCorrection" class="tabContent student hidden">
-    <h3>Request Correction</h3>
-    <input id="reason" placeholder="Reason for correction" />
-    <button onclick="requestCorrection()">Submit Correction</button>
+    <div class="spinner" id="login-spinner"></div>
+    <button onclick="login()">Login</button>
+    <p id="login-error" style="color:red; display:none;"></p>
   </div>
 </div>
 
-<!-- ---------------- Teacher Dashboard ---------------- -->
-<div id="teacherDashboard" class="hidden card">
-  <h2 id="teacherName"></h2>
+<!-- ================= DASHBOARD ================= -->
+<div id="dashboard" style="display:none;">
+  <header>
+    🌸 Smart Attendance & Wellness Portal
+    <button onclick="logout()" class="logout-btn">Logout</button>
+  </header>
 
-  <div class="tabs">
-    <button class="tabBtn active" onclick="openTab('pendingCorrections', 'teacher', event)">Pending Corrections</button>
-    <button class="tabBtn" onclick="openTab('auditLogs', 'teacher', event)">Audit Logs</button>
-    <button class="tabBtn" onclick="openTab('qrSession', 'teacher', event)">QR Session</button>
+  <!-- Date & User Info -->
+  <div class="motivation-bar">
+    <div class="datetime">
+      <span id="date"></span> • <span id="time"></span>
+    </div>
+    <div class="user-info">
+      <span id="user-email"></span> | <span id="user-role"></span>
+    </div>
   </div>
 
-  <div id="pendingCorrections" class="tabContent teacher">
-    <div id="corrections"></div>
+  <!-- Quote -->
+  <div class="motivation-bar">
+    <p id="quoteText"></p>
   </div>
 
-  <div id="auditLogs" class="tabContent teacher hidden">
-    <div id="auditLogsDiv"></div>
-  </div>
+  <!-- Dashboard Cards -->
+  <div class="dashboard-grid">
 
-  <div id="qrSession" class="tabContent teacher hidden">
-    <button onclick="createQRSession()">Generate QR Session</button>
+    <!-- Attendance -->
+    <div class="card" id="attendance-card">
+      <h3>📷 Scan QR & Mark Attendance</h3>
+      <button onclick="markAttendance()">Scan QR</button>
+      <p id="attendance-status"></p>
+    </div>
+
+    <!-- Attendance Prediction -->
+    <div class="card" id="prediction-card">
+      <h3>📊 Attendance Prediction</h3>
+      <button onclick="getPrediction()">Predict Attendance Risk</button>
+      <p id="prediction-status"></p>
+    </div>
+
+    <!-- Request Correction -->
+    <div class="card" id="correction-card">
+      <h3>🔐 Request Correction</h3>
+      <button onclick="requestCorrection()">Request Correction</button>
+      <p id="correction-status"></p>
+    </div>
+
+    <!-- Audit Logs -->
+    <div class="card" id="audit-card">
+      <h3>🧾 Audit Logs</h3>
+      <div id="audit-logs"></div>
+    </div>
+
+    <!-- Attendance Summary -->
+    <div class="card" id="summary-card">
+      <h3>📈 Attendance Summary</h3>
+      <div id="attendance-summary">
+        <p>Total Classes: <span id="total-classes">0</span></p>
+        <p>Present: <span id="present-count">0</span></p>
+        <p>Percentage: <span id="attendance-percentage">0%</span></p>
+      </div>
+    </div>
+
+    <!-- Today's Classes -->
+    <div class="card" id="today-card">
+      <h3>🎯 Today's Classes</h3>
+      <div id="todays-classes">
+        <p>No classes scheduled for today</p>
+      </div>
+    </div>
+
   </div>
 </div>
 
+<!-- Firebase Config -->
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
+    authDomain: "attendx-6be15.firebaseapp.com",
+    projectId: "attendx-6be15",
+    storageBucket: "attendx-6be15.firebasestorage.app",
+    messagingSenderId: "593387890331",
+    appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+</script>
+
+<!-- Main JS -->
 <script src="app.js"></script>
+
 </body>
 </html>
