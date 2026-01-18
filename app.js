@@ -1,199 +1,280 @@
-// Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-  authDomain: "attendx-6be15.firebaseapp.com",
-  projectId: "attendx-6be15",
-  storageBucket: "attendx-6be15.appspot.com",
-  messagingSenderId: "593387890331",
-  appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
-};
-
-// Init Firebase
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-
+// ================== GLOBAL ==================
 let currentUser = null;
 
-// ---------------------- LOGIN ----------------------
-async function login(){
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const role = document.getElementById('role').value;
+// ================== UTILS ==================
+function formatTime(date) {
+  return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
 
-    if(!email || !password || !role){
-        alert('Enter email, password and role');
-        return;
+function formatDate(date) {
+  return date.toISOString().split('T')[0];
+}
+
+function getRandomQuote() {
+  const quotes = [
+    "Knowledge is power.",
+    "Success is the sum of small efforts.",
+    "Consistency is key.",
+    "Learning never exhausts the mind.",
+    "Stay curious, stay smart."
+  ];
+  return quotes[Math.floor(Math.random()*quotes.length)];
+}
+
+// ================== LOGIN ==================
+async function login() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const role = document.getElementById('role').value;
+
+  const errorElement = document.getElementById('login-error');
+  errorElement.style.display = 'none';
+
+  if (!email || !password) {
+    errorElement.innerText = "Enter email & password";
+    errorElement.style.display = 'block';
+    return;
+  }
+
+  try {
+    const userCredential = await auth.signInWithEmailAndPassword(email, password);
+    const uid = userCredential.user.uid;
+
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) throw new Error("User data not found");
+    const data = doc.data();
+    if (data.role !== role) throw new Error("Role mismatch!");
+
+    currentUser = { uid, ...data };
+    localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
+
+    showDashboard();
+  } catch (err) {
+    console.error(err);
+    errorElement.innerText = "Login failed: " + err.message;
+    errorElement.style.display = 'block';
+  }
+}
+
+// ================== LOGOUT ==================
+function logout() {
+  auth.signOut();
+  localStorage.removeItem('smartAttendUser');
+  currentUser = null;
+  document.getElementById('login-page').style.display = 'block';
+  document.getElementById('dashboard').style.display = 'none';
+}
+
+// ================== DASHBOARD ==================
+function showDashboard() {
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  
+  // Date & Time
+  const now = new Date();
+  document.getElementById('date').innerText = now.toDateString();
+  document.getElementById('time').innerText = formatTime(now);
+
+  // User Info
+  document.getElementById('user-email').innerText = currentUser.email;
+  document.getElementById('user-role').innerText = currentUser.role;
+  
+  // Quote
+  document.getElementById('quoteText').innerText = getRandomQuote();
+
+  loadTodaysClasses();
+  loadAttendanceSummary();
+  loadAuditLogs();
+}
+
+// ================== TODAY'S CLASSES ==================
+async function loadTodaysClasses() {
+  const today = formatDate(new Date());
+  const container = document.getElementById('todays-classes');
+  container.innerHTML = '';
+
+  if (currentUser.role === 'student') {
+    // Fetch classes of student's department/year
+    const snapshot = await db.collection('classes')
+      .where('department','==',currentUser.department)
+      .where('year','==',currentUser.year).get();
+
+    const todayClasses = snapshot.docs.filter(doc => {
+      const data = doc.data();
+      return true; // for now show all classes
+    });
+
+    if (todayClasses.length === 0) container.innerHTML = '<p>No classes today</p>';
+    else todayClasses.forEach(doc=>{
+      const c = doc.data();
+      container.innerHTML += `<p>${c.className} (${c.startTime}-${c.endTime})</p>`;
+    });
+
+  } else if (currentUser.role === 'teacher') {
+    const snapshot = await db.collection('classes')
+      .where('teacherId','==',currentUser.uid).get();
+
+    if (snapshot.empty) container.innerHTML = '<p>No classes today</p>';
+    snapshot.docs.forEach(doc=>{
+      const c = doc.data();
+      container.innerHTML += `<p>${c.className} (${c.startTime}-${c.endTime})</p>`;
+    });
+  }
+}
+
+// ================== ATTENDANCE ==================
+async function markAttendance() {
+  if (currentUser.role !== 'student') {
+    alert("Only students can mark attendance!");
+    return;
+  }
+
+  // 1. Get today's QR session
+  const today = formatDate(new Date());
+  const qrSnapshot = await db.collection('qr_sessions')
+    .where('active','==',true)
+    .get();
+
+  if (qrSnapshot.empty) {
+    document.getElementById('attendance-status').innerText = 'No active QR session today';
+    return;
+  }
+
+  // 2. Geo-location
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+
+    const geoDoc = await db.collection('geo_fences').doc('college').get();
+    const geo = geoDoc.data();
+    const distance = Math.sqrt(Math.pow(lat-geo.latitude,2)+Math.pow(lng-geo.longitude,2))*111000;
+
+    if (distance > geo.radius) {
+      document.getElementById('attendance-status').innerText = 'Out of geo-fence';
+      return;
     }
 
-    try{
-        const userCred = await auth.signInWithEmailAndPassword(email, password);
-        const uid = userCred.user.uid;
-        const userDoc = await db.collection('users').doc(uid).get();
-        if(!userDoc.exists) throw 'User not found';
-        const data = userDoc.data();
-        if(data.role !== role) throw 'Role mismatch';
-        currentUser = { uid, ...data };
-        localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
+    // 3. Mark attendance
+    const qrDoc = qrSnapshot.docs[0];
+    const sessionId = qrDoc.id;
+    const classId = qrDoc.data().classId;
+
+    await db.collection('attendance').doc(classId)
+      .collection(today).doc(currentUser.uid).set({
+        status: 'present',
+        markedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        locationVerified: true,
+        qrVerified: true,
+        approved: false
+      });
+
+    // Log audit
+    await db.collection('audit_logs').add({
+      userId: currentUser.uid,
+      role: 'student',
+      action: 'ATTENDANCE_MARKED',
+      details: 'QR + Geo verified',
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    document.getElementById('attendance-status').innerText = 'Attendance marked successfully!';
+  }, err=>{
+    console.error(err);
+    document.getElementById('attendance-status').innerText = 'Location access denied';
+  });
+}
+
+// ================== ATTENDANCE SUMMARY ==================
+async function loadAttendanceSummary() {
+  const totalElem = document.getElementById('total-classes');
+  const presentElem = document.getElementById('present-count');
+  const percElem = document.getElementById('attendance-percentage');
+
+  if (currentUser.role !== 'student') {
+    totalElem.innerText = '-';
+    presentElem.innerText = '-';
+    percElem.innerText = '-';
+    return;
+  }
+
+  const snapshot = await db.collectionGroup('attendance')
+    .where(firebase.firestore.FieldPath.documentId(),'==',currentUser.uid)
+    .get();
+
+  const total = snapshot.docs.length;
+  const present = snapshot.docs.filter(d=>d.data().status==='present').length;
+  const perc = total === 0 ? 0 : Math.round((present/total)*100);
+
+  totalElem.innerText = total;
+  presentElem.innerText = present;
+  percElem.innerText = perc + '%';
+}
+
+// ================== AUDIT LOGS ==================
+async function loadAuditLogs() {
+  const container = document.getElementById('audit-logs');
+  container.innerHTML = '';
+
+  const snapshot = await db.collection('audit_logs')
+    .where('userId','==',currentUser.uid)
+    .orderBy('timestamp','desc')
+    .limit(10)
+    .get();
+
+  if (snapshot.empty) container.innerHTML = '<p>No logs yet</p>';
+  snapshot.docs.forEach(doc=>{
+    const d = doc.data();
+    container.innerHTML += `<p>${d.action} - ${new Date(d.timestamp?.toMillis()).toLocaleString()}</p>`;
+  });
+}
+
+// ================== CORRECTION REQUEST ==================
+async function requestCorrection() {
+  if (currentUser.role !== 'student') return;
+
+  const classId = prompt('Enter Class ID for correction:');
+  const date = prompt('Enter Date (YYYY-MM-DD):');
+  const reason = prompt('Enter reason:');
+
+  await db.collection('corrections').add({
+    studentId: currentUser.uid,
+    classId,
+    date,
+    reason,
+    status: 'pending',
+    requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    reviewedBy: ''
+  });
+
+  document.getElementById('correction-status').innerText = 'Request submitted!';
+}
+
+// ================== PREDICTION ==================
+async function getPrediction() {
+  if (currentUser.role !== 'student') return;
+
+  const doc = await db.collection('predictions').doc(currentUser.uid).get();
+  if (!doc.exists) {
+    document.getElementById('prediction-status').innerText = 'No prediction available';
+    return;
+  }
+
+  const data = doc.data();
+  document.getElementById('prediction-status').innerText =
+    `Attendance: ${data.attendancePercentage}% | Risk: ${data.riskLevel}`;
+}
+
+// ================== SESSION CHECK ==================
+auth.onAuthStateChanged(user=>{
+  if (user) {
+    db.collection('users').doc(user.uid).get().then(doc=>{
+      if(doc.exists){
+        currentUser = {uid: user.uid, ...doc.data()};
         showDashboard();
-    }catch(e){
-        alert('Login failed: ' + e.message || e);
-    }
-}
-
-// ---------------------- LOGOUT ----------------------
-function logout(){
-    auth.signOut();
-    localStorage.removeItem('smartAttendUser');
-    location.reload();
-}
-
-// ---------------------- DASHBOARD ----------------------
-function showDashboard(){
-    document.getElementById('login-page').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-
-    document.getElementById('user-email').textContent = currentUser.email;
-    document.getElementById('user-role').textContent = currentUser.role;
-
-    document.getElementById('welcome-msg').textContent = `Welcome, ${currentUser.name} (${currentUser.role})`;
-
-    displayRandomQuote();
-    updateDateTime();
-    setInterval(updateDateTime, 1000);
-
-    loadTodaysClasses();
-    loadAttendanceSummary();
-    loadCorrectionRequests();
-    loadAuditLogs();
-    loadPredictions();
-
-    if(currentUser.role === 'teacher'){
-        document.getElementById('teacher-qr-card').style.display = 'block';
-    }
-}
-
-// ---------------------- QUOTES & DATETIME ----------------------
-const quotes = [
-    "Education is the most powerful weapon. - Mandela",
-    "The future belongs to those who believe in their dreams. - Roosevelt",
-    "Success is not final, failure is not fatal. - Churchill"
-];
-function displayRandomQuote(){
-    const quoteEl = document.getElementById('quoteText');
-    quoteEl.textContent = quotes[Math.floor(Math.random()*quotes.length)];
-    setInterval(()=>{quoteEl.textContent = quotes[Math.floor(Math.random()*quotes.length)];}, 30000);
-}
-function updateDateTime(){
-    const now = new Date();
-    document.getElementById('date').textContent = now.toLocaleDateString();
-    document.getElementById('time').textContent = now.toLocaleTimeString();
-}
-
-// ---------------------- TODAY CLASSES ----------------------
-async function loadTodaysClasses(){
-    const classesEl = document.getElementById('todays-classes');
-    classesEl.innerHTML = '';
-    const snapshot = await db.collection('classes').get();
-    const today = new Date().getDay(); // 0-6
-    snapshot.forEach(doc=>{
-        const cls = doc.data();
-        classesEl.innerHTML += `<div>${cls.className} | ${cls.startTime}-${cls.endTime}</div>`;
+      } else logout();
     });
-}
-
-// ---------------------- ATTENDANCE ----------------------
-async function markAttendance(){
-    if(currentUser.role !== 'student'){ alert('Only students can mark'); return; }
-
-    if(!navigator.geolocation){ alert('Geo-location not supported'); return; }
-    navigator.geolocation.getCurrentPosition(async pos=>{
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-
-        // TODO: fetch today's active QR session & geo-fence
-        // verify QR & geo
-        // mark attendance in attendance/{classId}/{date}/{studentUid}
-
-        alert('Attendance feature triggered (QR + Geo verification)');
-    });
-}
-
-async function loadAttendanceSummary(){
-    document.getElementById('attendance-summary').innerHTML = '<p>Loading...</p>';
-    if(currentUser.role === 'student'){
-        const doc = await db.collection('predictions').doc(currentUser.uid).get();
-        if(doc.exists){
-            const data = doc.data();
-            document.getElementById('attendance-summary').innerHTML = `
-                <p>Attendance %: ${data.attendancePercentage}</p>
-                <p>Risk Level: ${data.riskLevel}</p>
-            `;
-        }else{
-            document.getElementById('attendance-summary').innerHTML = `<p>No attendance yet.</p>`;
-        }
-    }else{
-        document.getElementById('attendance-summary').innerHTML = `<p>Teacher view: Attendance stats</p>`;
-    }
-}
-
-// ---------------------- CORRECTION REQUESTS ----------------------
-async function loadCorrectionRequests(){
-    const corrEl = document.getElementById('correction-requests');
-    corrEl.innerHTML = 'Loading...';
-    const snapshot = await db.collection('corrections')
-        .where(currentUser.role==='student'?'studentId':'status','==',currentUser.role==='student'?currentUser.uid:'pending')
-        .get();
-    snapshot.forEach(doc=>{
-        const c = doc.data();
-        corrEl.innerHTML += `<div>${c.date} | ${c.reason} | ${c.status}</div>`;
-    });
-}
-
-// ---------------------- AUDIT LOGS ----------------------
-function loadAuditLogs(){
-    google.charts.load('current', {packages:['corechart']});
-    google.charts.setOnLoadCallback(()=>{
-        const data = google.visualization.arrayToDataTable([
-            ['Action','Count'],
-            ['Attendance Marked', 5],
-            ['Correction Approved', 2],
-            ['Correction Rejected', 1]
-        ]);
-        const chart = new google.visualization.PieChart(document.getElementById('chart_div'));
-        chart.draw(data, {});
-    });
-}
-
-// ---------------------- PREDICTIONS ----------------------
-async function loadPredictions(){
-    const predEl = document.getElementById('prediction-data');
-    if(currentUser.role==='student'){
-        const doc = await db.collection('predictions').doc(currentUser.uid).get();
-        if(doc.exists){
-            const data = doc.data();
-            predEl.innerHTML = `<p>Attendance: ${data.attendancePercentage}%</p><p>Risk: ${data.riskLevel}</p>`;
-        }else{
-            predEl.innerHTML = `<p>No prediction data.</p>`;
-        }
-    }else{
-        predEl.innerHTML = `<p>Teacher cannot see predictions.</p>`;
-    }
-}
-
-// ---------------------- TEACHER QR ----------------------
-async function generateQRCode(){
-    if(currentUser.role!=='teacher'){ alert('Only teachers'); return; }
-    const token = Math.random().toString(36).substring(2,8).toUpperCase();
-    const now = firebase.firestore.Timestamp.now();
-    const later = firebase.firestore.Timestamp.fromDate(new Date(Date.now()+10*60*1000));
-    await db.collection('qr_sessions').add({
-        classId: 'classIdHere', // TODO select class
-        teacherId: currentUser.uid,
-        qrToken: token,
-        validFrom: now,
-        validTill: later,
-        active:true
-    });
-    alert('QR Generated: '+token);
-}
+  } else {
+    document.getElementById('login-page').style.display = 'block';
+    document.getElementById('dashboard').style.display = 'none';
+  }
+});
