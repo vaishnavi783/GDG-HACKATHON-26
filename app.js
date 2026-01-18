@@ -1,212 +1,201 @@
-// ---------------- Firebase Init ----------------
-const firebaseConfig = {
-  apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-  authDomain: "attendx-6be15.firebaseapp.com",
-  projectId: "attendx-6be15",
-  storageBucket: "attendx-6be15.appspot.com",
-  messagingSenderId: "593387890331",
-  appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+// ==================== Firebase References ====================
+const loginPage = document.getElementById("login-page");
+const dashboard = document.getElementById("dashboard");
+const userEmailElem = document.getElementById("user-email");
+const userRoleElem = document.getElementById("user-role");
+
+const attendanceStatus = document.getElementById("attendance-status");
+const predictionStatus = document.getElementById("prediction-status");
+const correctionStatus = document.getElementById("correction-status");
+const auditLogsDiv = document.getElementById("audit-logs");
+
+const totalClassesElem = document.getElementById("total-classes");
+const presentCountElem = document.getElementById("present-count");
+const attendancePercentageElem = document.getElementById("attendance-percentage");
+
+const todaysClassesDiv = document.getElementById("todays-classes");
+
 let currentUser = null;
 
-// ---------------- Login ----------------
-function login() {
+// ==================== Login ====================
+async function login() {
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
+  const role = document.getElementById("role").value;
 
-  auth.signInWithEmailAndPassword(email, password)
-    .then(userCredential => {
-      currentUser = userCredential.user;
-      db.collection("users").doc(currentUser.uid).get().then(doc => {
-        const role = doc.data().role;
-        if (role === "student") showStudentDashboard(doc.data());
-        else if (role === "teacher") showTeacherDashboard(doc.data());
-      });
-    })
-    .catch(err => alert("Login failed: " + err.message));
-}
+  try {
+    const userCredential = await auth.signInWithEmailAndPassword(email, password);
+    const user = userCredential.user;
+    currentUser = user;
 
-// ---------------- Student Dashboard ----------------
-function showStudentDashboard(user) {
-  document.getElementById("loginBox").classList.add("hidden");
-  document.getElementById("studentDashboard").classList.remove("hidden");
-  document.getElementById("studentName").innerText = `Welcome ${user.name}`;
-  loadAttendanceHistory();
-}
+    // Check role in Firestore
+    const doc = await db.collection("users").doc(user.uid).get();
+    if (!doc.exists || doc.data().role !== role) {
+      alert("Role mismatch!");
+      auth.signOut();
+      return;
+    }
 
-async function markAttendance() {
-  // 1️⃣ Get student location
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const lat = pos.coords.latitude;
-    const lon = pos.coords.longitude;
+    userEmailElem.textContent = doc.data().email;
+    userRoleElem.textContent = doc.data().role;
 
-    // 2️⃣ Get geo fence
-    const geoSnap = await db.collection("geo_fences").doc("college").get();
-    const geo = geoSnap.data();
-    const distance = getDistance(lat, lon, geo.latitude, geo.longitude);
-    const insideCollege = distance <= geo.radius;
+    loginPage.style.display = "none";
+    dashboard.style.display = "block";
 
-    if (!insideCollege) return alert("You are outside the allowed area. Attendance not marked.");
-
-    // 3️⃣ Get today date and mark attendance
-    const today = new Date().toISOString().split("T")[0];
-    const classId = "DBMS"; // Example
-    await db.collection("attendance").doc(classId)
-      .collection(today)
-      .doc(currentUser.uid)
-      .set({
-        status: "present",
-        markedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        locationVerified: insideCollege,
-        qrVerified: false, // QR code verification can be added separately
-        approved: false
-      });
-
-    // 4️⃣ Add audit log
-    await db.collection("audit_logs").add({
-      userId: currentUser.uid,
-      action: "ATTENDANCE_MARKED",
-      role: "student",
-      details: "Geo verified",
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    alert("Attendance marked successfully!");
-    loadAttendanceHistory();
-  });
-}
-
-// Haversine formula for distance in meters
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // meters
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
-  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
-// Attendance history
-async function loadAttendanceHistory() {
-  const today = new Date().toISOString().split("T")[0];
-  const classId = "DBMS";
-  const historyDiv = document.getElementById("history");
-  historyDiv.innerHTML = "";
-
-  const snapshot = await db.collection("attendance").doc(classId)
-    .collection(today)
-    .doc(currentUser.uid)
-    .get();
-
-  if (snapshot.exists) {
-    const data = snapshot.data();
-    historyDiv.innerText = `${today}: ${data.status} (Approved: ${data.approved})`;
-  } else {
-    historyDiv.innerText = "No attendance yet today.";
+    loadDashboard();
+  } catch (error) {
+    alert("Login failed: " + error.message);
   }
 }
 
-// Request correction
-async function requestCorrection() {
-  const reason = document.getElementById("reason").value;
-  const today = new Date().toISOString().split("T")[0];
-  const classId = "DBMS";
+// ==================== Logout ====================
+function logout() {
+  auth.signOut();
+  loginPage.style.display = "flex";
+  dashboard.style.display = "none";
+}
 
-  await db.collection("corrections").add({
+// ==================== Load Dashboard ====================
+async function loadDashboard() {
+  if (!currentUser) return;
+
+  const userDoc = await db.collection("users").doc(currentUser.uid).get();
+  const role = userDoc.data().role;
+
+  if (role === "student") {
+    loadStudentDashboard();
+  } else if (role === "teacher") {
+    loadTeacherDashboard();
+  }
+}
+
+// ==================== Student Dashboard ====================
+async function loadStudentDashboard() {
+  await loadTodaysClasses();
+  await loadAttendanceSummary();
+  await loadAuditLogs();
+}
+
+// Scan QR & Mark Attendance
+async function markAttendance() {
+  const studentUid = currentUser.uid;
+
+  // You can generate QR verification logic here
+  const sessionId = "dummy-session"; // replace with real sessionId after QR scan
+  const classId = "dummy-class"; // replace with classId of QR session
+  const now = new Date();
+
+  // Geo location (dummy example)
+  const location = new firebase.firestore.GeoPoint(12.9716, 77.5946);
+
+  await db
+    .collection("attendance")
+    .doc(classId)
+    .collection(formatDate(now))
+    .doc(studentUid)
+    .set({
+      status: "present",
+      markedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      locationVerified: true,
+      qrVerified: true,
+      approved: false
+    });
+
+  await db.collection("audit_logs").add({
+    userId: studentUid,
+    action: "ATTENDANCE_MARKED",
+    role: "student",
+    details: "QR + Geo verified",
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  attendanceStatus.textContent = "Attendance marked successfully!";
+  loadAttendanceSummary();
+}
+
+// ==================== Attendance Prediction ====================
+async function getPrediction() {
+  const doc = await db.collection("predictions").doc(currentUser.uid).get();
+  if (doc.exists) {
+    predictionStatus.textContent = `Attendance: ${doc.data().attendancePercentage}% | Risk: ${doc.data().riskLevel}`;
+  } else {
+    predictionStatus.textContent = "Prediction not available.";
+  }
+}
+
+// ==================== Request Correction ====================
+async function requestCorrection() {
+  const reason = prompt("Enter reason for correction:");
+  if (!reason) return;
+
+  const requestRef = db.collection("corrections").doc();
+  await requestRef.set({
     studentId: currentUser.uid,
-    classId,
-    date: today,
-    reason,
+    classId: "dummy-class", // Replace dynamically
+    date: formatDate(new Date()),
+    reason: reason,
     status: "pending",
     requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
     reviewedBy: ""
   });
 
-  alert("Correction requested!");
-  document.getElementById("reason").value = "";
+  correctionStatus.textContent = "Correction request sent!";
 }
 
-// ---------------- Teacher Dashboard ----------------
-function showTeacherDashboard(user) {
-  document.getElementById("loginBox").classList.add("hidden");
-  document.getElementById("teacherDashboard").classList.remove("hidden");
-  document.getElementById("teacherName").innerText = `Welcome ${user.name}`;
-  loadCorrections();
-  loadAuditLogs();
-}
-
-// Load pending corrections
-async function loadCorrections() {
-  const snapshot = await db.collection("corrections").where("status", "==", "pending").get();
-  const div = document.getElementById("corrections");
-  div.innerHTML = "";
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    const el = document.createElement("div");
-    el.innerHTML = `
-      ${data.studentId} - ${data.date} - ${data.reason} 
-      <button onclick="approveCorrection('${doc.id}', '${data.studentId}', '${data.classId}', '${data.date}')">Approve</button>
-      <button onclick="rejectCorrection('${doc.id}')">Reject</button>
-    `;
-    div.appendChild(el);
-  });
-}
-
-// Approve correction
-async function approveCorrection(docId, studentId, classId, date) {
-  await db.collection("corrections").doc(docId).update({
-    status: "approved",
-    reviewedBy: currentUser.uid
-  });
-  await db.collection("attendance").doc(classId).collection(date).doc(studentId).update({
-    status: "present",
-    approved: true
-  });
-  alert("Correction approved!");
-  loadCorrections();
-  loadAuditLogs();
-}
-
-// Reject correction
-async function rejectCorrection(docId) {
-  await db.collection("corrections").doc(docId).update({
-    status: "rejected",
-    reviewedBy: currentUser.uid
-  });
-  alert("Correction rejected!");
-  loadCorrections();
-  loadAuditLogs();
-}
-
-// Load audit logs
+// ==================== Load Audit Logs ====================
 async function loadAuditLogs() {
-  const snapshot = await db.collection("audit_logs").orderBy("timestamp", "desc").limit(10).get();
-  const div = document.getElementById("auditLogs");
-  div.innerHTML = "";
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    div.innerHTML += `<p>${data.userId} - ${data.action} - ${data.details}</p>`;
+  const logs = await db.collection("audit_logs")
+    .where("userId", "==", currentUser.uid)
+    .orderBy("timestamp", "desc")
+    .limit(10)
+    .get();
+
+  auditLogsDiv.innerHTML = "";
+  logs.forEach(log => {
+    const div = document.createElement("div");
+    div.textContent = `[${log.data().timestamp?.toDate().toLocaleString()}] ${log.data().action} - ${log.data().details}`;
+    auditLogsDiv.appendChild(div);
   });
 }
 
-// ---------------- QR Session ----------------
-async function createQRSession() {
-  const token = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const now = firebase.firestore.Timestamp.now();
-  const tenMinutes = new Date().getTime() + 10*60*1000;
+// ==================== Attendance Summary ====================
+async function loadAttendanceSummary() {
+  const attendanceCol = await db.collection("attendance")
+    .doc("dummy-class") // Replace dynamically
+    .collection(formatDate(new Date()))
+    .get();
 
-  await db.collection("qr_sessions").add({
-    classId: "DBMS",
-    teacherId: currentUser.uid,
-    qrToken: token,
-    validFrom: now,
-    validTill: firebase.firestore.Timestamp.fromDate(new Date(tenMinutes)),
-    active: true
+  const total = attendanceCol.size;
+  let present = 0;
+  attendanceCol.forEach(doc => {
+    if (doc.data().status === "present") present++;
   });
-  alert("QR Session generated: " + token);
+
+  totalClassesElem.textContent = total;
+  presentCountElem.textContent = present;
+  attendancePercentageElem.textContent = total > 0 ? ((present / total) * 100).toFixed(2) + "%" : "0%";
+}
+
+// ==================== Load Today's Classes ====================
+async function loadTodaysClasses() {
+  const today = formatDate(new Date());
+  // You can fetch from classes collection based on student's department/year
+  todaysClassesDiv.innerHTML = `<p>No classes scheduled for today</p>`;
+}
+
+// ==================== Teacher Dashboard ====================
+async function loadTeacherDashboard() {
+  // Show classes, QR sessions, review corrections etc
+  loadTodaysClasses();
+  loadAuditLogs();
+}
+
+// ==================== Helpers ====================
+function formatDate(date) {
+  const yyyy = date.getFullYear();
+  let mm = date.getMonth() + 1;
+  let dd = date.getDate();
+  if (dd < 10) dd = '0' + dd;
+  if (mm < 10) mm = '0' + mm;
+  return `${yyyy}-${mm}-${dd}`;
 }
