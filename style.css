@@ -11,7 +11,7 @@ body {
   padding: 20px;
 }
 
-/* Login Page Styles */
+/* ================= LOGIN PAGE ================= */
 #login-page {
   display: flex;
   justify-content: center;
@@ -42,7 +42,8 @@ body {
   font-size: 14px;
 }
 
-.login-card input, .login-card select {
+.login-card input, 
+.login-card select {
   width: 100%;
   padding: 12px 15px;
   margin: 10px 0;
@@ -52,7 +53,8 @@ body {
   transition: border-color 0.3s;
 }
 
-.login-card input:focus, .login-card select:focus {
+.login-card input:focus, 
+.login-card select:focus {
   border-color: #667eea;
   outline: none;
 }
@@ -75,8 +77,15 @@ body {
   transform: translateY(-2px);
 }
 
-/* Dashboard Styles */
+.error-msg {
+  color: red;
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+/* ================= DASHBOARD ================= */
 #dashboard {
+  display: none; /* hidden until login */
   animation: slideUp 0.5s ease;
 }
 
@@ -94,7 +103,7 @@ header {
   box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }
 
-.logout-btn {
+header button {
   background: #ff4757;
   color: white;
   border: none;
@@ -104,32 +113,22 @@ header {
   font-size: 14px;
 }
 
-.motivation-bar {
-  background: rgba(255, 255, 255, 0.9);
-  padding: 15px;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.datetime {
-  font-weight: 500;
-  color: #555;
-}
-
+/* User Info / Quote Bar */
 .user-info {
+  margin-bottom: 20px;
   font-size: 14px;
   color: #667eea;
 }
 
+.user-info span {
+  font-weight: 500;
+}
+
+/* Grid layout for dashboard cards */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 20px;
-  margin-top: 20px;
 }
 
 .card {
@@ -168,8 +167,9 @@ header {
   opacity: 0.9;
 }
 
-#chart_div {
-  height: 200px;
+/* Chart div */
+#auditGraph {
+  height: 300px;
   margin-top: 10px;
 }
 
@@ -189,13 +189,7 @@ header {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
-  
-  .motivation-bar {
-    flex-direction: column;
-    gap: 10px;
-    text-align: center;
-  }
-  
+
   header {
     flex-direction: column;
     gap: 15px;
