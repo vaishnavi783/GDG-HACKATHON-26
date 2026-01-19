@@ -1,274 +1,277 @@
-// ================== GLOBAL ==================
+// ================= GLOBAL =================
 let currentUser = null;
 
-// ================== UTILS ==================
-function formatTime(date) {
-  return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+// ================= UTILS =================
+function todayDate() {
+  return new Date().toISOString().split("T")[0];
 }
 
-function formatDate(date) {
-  return date.toISOString().split('T')[0];
+function randomToken() {
+  return Math.random().toString(36).substring(2, 10).toUpperCase();
 }
 
-function getRandomQuote() {
-  const quotes = [
-    "Knowledge is power.",
-    "Success is the sum of small efforts.",
-    "Consistency is key.",
-    "Learning never exhausts the mind.",
-    "Stay curious, stay smart."
-  ];
-  return quotes[Math.floor(Math.random()*quotes.length)];
+// Haversine distance (meters)
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) *
+    Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// ================== LOGIN ==================
+// ================= LOGIN =================
 async function login() {
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const roleSelected = document.getElementById('role').value.toLowerCase();
-  const errorElement = document.getElementById('login-error');
-  errorElement.style.display = 'none';
+  const emailVal = document.getElementById("email").value.trim();
+  const passwordVal = document.getElementById("password").value;
+  const roleVal = document.getElementById("role").value;
+  const err = document.getElementById("login-error");
 
-  if (!email || !password) {
-    errorElement.innerText = "Enter email & password";
-    errorElement.style.display = 'block';
-    return;
-  }
+  err.style.display = "none";
 
   try {
-    // Sign in with Firebase Auth
-    const userCredential = await auth.signInWithEmailAndPassword(email, password);
-    const uid = userCredential.user.uid;
+    const cred = await auth.signInWithEmailAndPassword(emailVal, passwordVal);
+    const snap = await db.collection("users").doc(cred.user.uid).get();
 
-    // Get user from Firestore
-    const userDoc = await db.collection('users').doc(uid).get();
-    if (!userDoc.exists) throw new Error("User not found in Firestore");
+    if (!snap.exists || snap.data().role !== roleVal)
+      throw "Role mismatch";
 
-    const userData = userDoc.data();
-    const userRole = (userData.role || "").toLowerCase();
-    if (userRole !== roleSelected) throw new Error(`Role mismatch!`);
-
-    currentUser = { uid, ...userData };
-    localStorage.setItem('smartAttendUser', JSON.stringify(currentUser));
-
+    currentUser = { uid: cred.user.uid, ...snap.data() };
     showDashboard();
-  } catch (err) {
-    console.error(err);
-    errorElement.innerText = "Login failed: " + (err.message || err);
-    errorElement.style.display = 'block';
+  } catch (e) {
+    err.innerText = e;
+    err.style.display = "block";
   }
 }
 
-// ================== LOGOUT ==================
 function logout() {
   auth.signOut();
-  localStorage.removeItem('smartAttendUser');
-  currentUser = null;
-  document.getElementById('login-page').style.display = 'block';
-  document.getElementById('dashboard').style.display = 'none';
+  location.reload();
 }
 
-// ================== DASHBOARD ==================
+// ================= DASHBOARD =================
 function showDashboard() {
-  document.getElementById('login-page').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById("login-page").style.display = "none";
+  document.getElementById("dashboard").style.display = "block";
 
-  // Date & Time
-  const now = new Date();
-  document.getElementById('date').innerText = now.toDateString();
-  document.getElementById('time').innerText = formatTime(now);
+  document.getElementById("user-email").innerText = currentUser.email;
+  document.getElementById("user-role").innerText = currentUser.role;
+  document.getElementById("quoteText").innerText =
+    "Consistency beats motivation.";
 
-  // User Info
-  document.getElementById('user-email').innerText = currentUser.email;
-  document.getElementById('user-role').innerText = currentUser.role;
-
-  // Quote
-  document.getElementById('quoteText').innerText = getRandomQuote();
-
-  loadTodaysClasses();
-  loadAttendanceSummary();
+  loadTodayClasses();
   loadAuditLogs();
-}
+  loadAuditGraph();
 
-// ================== TODAY'S CLASSES ==================
-async function loadTodaysClasses() {
-  const today = formatDate(new Date());
-  const container = document.getElementById('todays-classes');
-  container.innerHTML = '';
-
-  if (currentUser.role === 'student') {
-    const snapshot = await db.collection('classes')
-      .where('department','==',currentUser.department)
-      .where('year','==',currentUser.year).get();
-
-    if (snapshot.empty) container.innerHTML = '<p>No classes today</p>';
-    snapshot.docs.forEach(doc=>{
-      const c = doc.data();
-      container.innerHTML += `<p>${c.className} (${c.startTime}-${c.endTime})</p>`;
-    });
-
-  } else if (currentUser.role === 'teacher') {
-    const snapshot = await db.collection('classes')
-      .where('teacherId','==',currentUser.uid).get();
-
-    if (snapshot.empty) container.innerHTML = '<p>No classes today</p>';
-    snapshot.docs.forEach(doc=>{
-      const c = doc.data();
-      container.innerHTML += `<p>${c.className} (${c.startTime}-${c.endTime})</p>`;
-    });
+  if (currentUser.role === "teacher") {
+    document.querySelectorAll(".teacher-only")
+      .forEach(el => el.style.display = "block");
+    loadCorrections();
   }
 }
 
-// ================== ATTENDANCE ==================
+// ================= TEACHER: GENERATE QR =================
+async function generateQR() {
+  const clsSnap = await db.collection("classes")
+    .where("teacherId", "==", currentUser.uid).get();
+
+  if (clsSnap.empty) return alert("No classes assigned");
+
+  const cls = clsSnap.docs[0];
+  const token = randomToken();
+
+  await db.collection("qr_sessions").add({
+    classId: cls.id,
+    teacherId: currentUser.uid,
+    qrToken: token,
+    validFrom: firebase.firestore.Timestamp.now(),
+    validTill: firebase.firestore.Timestamp.fromDate(
+      new Date(Date.now() + 5 * 60000)
+    ),
+    active: true
+  });
+
+  document.getElementById("qr-output").innerHTML =
+    `<b>QR Token:</b> ${token}`;
+
+  logAudit("QR_GENERATED");
+}
+
+// ================= STUDENT: MARK ATTENDANCE =================
 async function markAttendance() {
-  if (currentUser.role !== 'student') {
-    alert("Only students can mark attendance!");
-    return;
-  }
+  const status = document.getElementById("attendance-status");
 
-  const today = formatDate(new Date());
+  if (!navigator.geolocation)
+    return status.innerText = "Location not supported";
 
-  const qrSnapshot = await db.collection('qr_sessions')
-    .where('active','==',true)
-    .get();
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const geoSnap = await db.collection("geo_fences").doc("college").get();
+    const g = geoSnap.data();
 
-  if (qrSnapshot.empty) {
-    document.getElementById('attendance-status').innerText = 'No active QR session today';
-    return;
-  }
+    const distance = getDistance(
+      pos.coords.latitude,
+      pos.coords.longitude,
+      g.latitude,
+      g.longitude
+    );
 
-  navigator.geolocation.getCurrentPosition(async pos=>{
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
+    if (distance > g.radius + 50)
+      return status.innerText =
+        `Outside campus (${Math.round(distance)}m)`;
 
-    const geoDoc = await db.collection('geo_fences').doc('college').get();
-    const geo = geoDoc.data();
-    const distance = Math.sqrt(Math.pow(lat-geo.latitude,2)+Math.pow(lng-geo.longitude,2))*111000;
+    const qrSnap = await db.collection("qr_sessions")
+      .where("active", "==", true).get();
 
-    if (distance > geo.radius) {
-      document.getElementById('attendance-status').innerText = 'Out of geo-fence';
-      return;
-    }
+    if (qrSnap.empty)
+      return status.innerText = "No active QR session";
 
-    const qrDoc = qrSnapshot.docs[0];
-    const sessionId = qrDoc.id;
-    const classId = qrDoc.data().classId;
+    const q = qrSnap.docs[0];
 
-    await db.collection('attendance').doc(classId)
-      .collection(today).doc(currentUser.uid).set({
-        status: 'present',
+    await db.collection("attendance")
+      .doc(q.data().classId)
+      .collection(todayDate())
+      .doc(currentUser.uid)
+      .set({
+        status: "present",
         markedAt: firebase.firestore.FieldValue.serverTimestamp(),
         locationVerified: true,
         qrVerified: true,
         approved: false
       });
 
-    await db.collection('audit_logs').add({
-      userId: currentUser.uid,
-      role: 'student',
-      action: 'ATTENDANCE_MARKED',
-      details: 'QR + Geo verified',
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    logAudit("ATTENDANCE_MARKED");
+    status.innerText = "Attendance marked successfully";
+  },
+  () => status.innerText = "Location permission denied",
+  { enableHighAccuracy: true });
+}
 
-    document.getElementById('attendance-status').innerText = 'Attendance marked successfully!';
-  }, err=>{
-    console.error(err);
-    document.getElementById('attendance-status').innerText = 'Location access denied';
+// ================= STUDENT: PREDICTION =================
+async function getPrediction() {
+  const el = document.getElementById("prediction-status");
+  const snap = await db.collection("predictions")
+    .doc(currentUser.uid).get();
+
+  if (!snap.exists) return el.innerText = "No prediction available";
+
+  const d = snap.data();
+  el.innerText = `${d.attendancePercentage}% — ${d.riskLevel}`;
+}
+
+// ================= STUDENT: CORRECTION REQUEST =================
+async function requestCorrection() {
+  const cls = prompt("Class ID");
+  const date = prompt("Date (YYYY-MM-DD)");
+  const reason = prompt("Reason");
+
+  await db.collection("corrections").add({
+    studentId: currentUser.uid,
+    classId: cls,
+    date,
+    reason,
+    status: "pending",
+    requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    reviewedBy: ""
+  });
+
+  logAudit("CORRECTION_REQUESTED");
+}
+
+// ================= TEACHER: VIEW & APPROVE =================
+async function loadCorrections() {
+  const box = document.getElementById("correction-requests");
+  const snap = await db.collection("corrections")
+    .where("status", "==", "pending").get();
+
+  box.innerHTML = "";
+
+  snap.forEach(d => {
+    const c = d.data();
+    box.innerHTML += `
+      <p>${c.studentId}: ${c.reason}
+      <button onclick="approveCorrection('${d.id}')">Approve</button></p>`;
   });
 }
 
-// ================== ATTENDANCE SUMMARY ==================
-async function loadAttendanceSummary() {
-  if (currentUser.role !== 'student') return;
-
-  const totalElem = document.getElementById('total-classes');
-  const presentElem = document.getElementById('present-count');
-  const percElem = document.getElementById('attendance-percentage');
-
-  const snapshot = await db.collectionGroup('attendance')
-    .get();
-
-  let total=0, present=0;
-  snapshot.docs.forEach(d=>{
-    const data = d.data();
-    if(d.id === currentUser.uid){
-      total++;
-      if(data.status==='present') present++;
-    }
+async function approveCorrection(id) {
+  await db.collection("corrections").doc(id).update({
+    status: "approved",
+    reviewedBy: currentUser.uid
   });
 
-  const perc = total===0?0:Math.round((present/total)*100);
-  totalElem.innerText = total;
-  presentElem.innerText = present;
-  percElem.innerText = perc + '%';
+  logAudit("CORRECTION_APPROVED");
+  loadCorrections();
 }
 
-// ================== AUDIT LOGS ==================
+// ================= TODAY'S CLASSES =================
+async function loadTodayClasses() {
+  const box = document.getElementById("todays-classes");
+
+  const ref = currentUser.role === "teacher"
+    ? db.collection("classes").where("teacherId", "==", currentUser.uid)
+    : db.collection("classes")
+        .where("department", "==", currentUser.department)
+        .where("year", "==", currentUser.year);
+
+  const snap = await ref.get();
+  box.innerHTML = "";
+
+  snap.forEach(d => {
+    const c = d.data();
+    box.innerHTML += `<p>${c.className} (${c.startTime}-${c.endTime})</p>`;
+  });
+}
+
+// ================= AUDIT LOGS =================
 async function loadAuditLogs() {
-  const container = document.getElementById('audit-logs');
-  container.innerHTML = '';
+  const box = document.getElementById("audit-logs");
 
-  const snapshot = await db.collection('audit_logs')
-    .where('userId','==',currentUser.uid)
-    .orderBy('timestamp','desc')
+  const snap = await db.collection("audit_logs")
+    .where("userId", "==", currentUser.uid)
+    .orderBy("timestamp", "desc")
     .limit(10)
     .get();
 
-  if (snapshot.empty) container.innerHTML = '<p>No logs yet</p>';
-  snapshot.docs.forEach(doc=>{
-    const d = doc.data();
-    container.innerHTML += `<p>${d.action} - ${new Date(d.timestamp?.toMillis()).toLocaleString()}</p>`;
+  box.innerHTML = "";
+  snap.forEach(d => {
+    box.innerHTML += `<p>${d.data().action}</p>`;
   });
 }
 
-// ================== CORRECTION REQUEST ==================
-async function requestCorrection() {
-  if (currentUser.role !== 'student') return;
+// ================= AUDIT GRAPH =================
+google.charts.load("current", { packages: ["corechart"] });
 
-  const classId = prompt('Enter Class ID for correction:');
-  const date = prompt('Enter Date (YYYY-MM-DD):');
-  const reason = prompt('Enter reason:');
+async function loadAuditGraph() {
+  const snap = await db.collection("audit_logs").get();
+  const map = {};
 
-  await db.collection('corrections').add({
-    studentId: currentUser.uid,
-    classId,
-    date,
-    reason,
-    status: 'pending',
-    requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    reviewedBy: ''
+  snap.forEach(d => {
+    map[d.data().action] = (map[d.data().action] || 0) + 1;
   });
 
-  document.getElementById('correction-status').innerText = 'Request submitted!';
-}
+  const rows = [["Action", "Count"]];
+  Object.entries(map).forEach(([k, v]) => rows.push([k, v]));
 
-// ================== PREDICTION ==================
-async function getPrediction() {
-  if (currentUser.role !== 'student') return;
-
-  const doc = await db.collection('predictions').doc(currentUser.uid).get();
-  if (!doc.exists) {
-    document.getElementById('prediction-status').innerText = 'No prediction available';
-    return;
-  }
-
-  const data = doc.data();
-  document.getElementById('prediction-status').innerText =
-    `Attendance: ${data.attendancePercentage}% | Risk: ${data.riskLevel}`;
-}
-
-// ================== SESSION CHECK ==================
-auth.onAuthStateChanged(user=>{
-  if (user) {
-    db.collection('users').doc(user.uid).get().then(doc=>{
-      if(doc.exists){
-        currentUser = {uid: user.uid, ...doc.data()};
-        showDashboard();
-      } else logout();
+  google.charts.setOnLoadCallback(() => {
+    const chart = new google.visualization.PieChart(
+      document.getElementById("auditGraph")
+    );
+    chart.draw(google.visualization.arrayToDataTable(rows), {
+      title: "Audit Activity"
     });
-  } else {
-    document.getElementById('login-page').style.display = 'block';
-    document.getElementById('dashboard').style.display = 'none';
-  }
-});
+  });
+}
+
+// ================= AUDIT HELPER =================
+function logAudit(action) {
+  db.collection("audit_logs").add({
+    userId: currentUser.uid,
+    role: currentUser.role,
+    action,
+    details: "",
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
