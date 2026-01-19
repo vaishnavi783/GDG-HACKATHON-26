@@ -70,6 +70,7 @@ function showDashboard() {
     document.querySelectorAll(".teacher-only")
       .forEach(el => el.style.display = "block");
     loadCorrections();
+    loadEditableClasses();
   }
 }
 
@@ -118,7 +119,7 @@ async function markAttendance() {
       g.longitude
     );
 
-    if (distance > g.radius + 50)
+    if (distance > g.radius)
       return status.innerText =
         `Outside campus (${Math.round(distance)}m)`;
 
@@ -204,6 +205,32 @@ async function approveCorrection(id) {
 
   logAudit("CORRECTION_APPROVED");
   loadCorrections();
+}
+
+// ================= TEACHER: EDIT TODAY'S CLASSES =================
+async function loadEditableClasses() {
+  const box = document.getElementById("edit-classes");
+  const snap = await db.collection("classes")
+    .where("teacherId", "==", currentUser.uid).get();
+
+  box.innerHTML = "";
+  snap.forEach(d => {
+    const c = d.data();
+    box.innerHTML += `
+      <p>
+        <input id="class-${d.id}" value="${c.className}">
+        <button onclick="updateClass('${d.id}')">Update</button>
+      </p>`;
+  });
+}
+
+async function updateClass(classId) {
+  const val = document.getElementById(`class-${classId}`).value;
+  await db.collection("classes").doc(classId).update({
+    className: val
+  });
+  logAudit("CLASS_UPDATED");
+  loadEditableClasses();
 }
 
 // ================= TODAY'S CLASSES =================
