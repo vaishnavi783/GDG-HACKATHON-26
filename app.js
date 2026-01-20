@@ -48,12 +48,12 @@ async function login() {
   const role = roleSelect.value.toLowerCase();
   const err = document.getElementById("login-error");
 
-  err.style.display = "none";
+  err.classList.add("hidden");
   err.innerText = "";
 
   if (!email || !password) {
     err.innerText = "Please enter email and password";
-    err.style.display = "block";
+    err.classList.remove("hidden");
     return;
   }
 
@@ -68,14 +68,14 @@ async function login() {
 
     currentUser = { uid: cred.user.uid, email: cred.user.email, ...doc.data() };
 
-    console.log("Logged in user:", currentUser); // debug
+    console.log("Logged in user:", currentUser);
 
     logAudit("USER_LOGGED_IN");
     showDashboard();
   } catch (e) {
     console.error(e);
     err.innerText = e.message;
-    err.style.display = "block";
+    err.classList.remove("hidden");
   }
 }
 
@@ -88,27 +88,26 @@ function logout() {
 function showDashboard() {
   if (!currentUser) return;
 
-  loginPage.style.display = "none";
-  dashboard.style.display = "block";
+  loginPage.classList.add("hidden");
+  dashboard.classList.remove("hidden");
 
   userEmail.innerText = currentUser.email;
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
-  // Hide all first
-  document.querySelectorAll(".teacher-only").forEach((e) => (e.style.display = "none"));
-  document.querySelectorAll(".student-only").forEach((e) => (e.style.display = "none"));
+  // Hide all teacher/student tabs first
+  document.querySelectorAll(".teacher-only, .student-only").forEach((e) => e.classList.add("hidden"));
 
-  console.log("Current role:", currentUser.role); // debug
+  console.log("Current role:", currentUser.role);
 
   if (currentUser.role === "teacher") {
     console.log("Showing teacher tabs");
-    document.querySelectorAll(".teacher-only").forEach((e) => (e.style.display = "block"));
+    document.querySelectorAll(".teacher-only").forEach((e) => e.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
   } else if (currentUser.role === "student") {
     console.log("Showing student tabs");
-    document.querySelectorAll(".student-only").forEach((e) => (e.style.display = "block"));
+    document.querySelectorAll(".student-only").forEach((e) => e.classList.remove("hidden"));
     getPrediction();
   } else {
     console.warn("Unknown role:", currentUser.role);
@@ -178,7 +177,6 @@ async function loadTodayClasses() {
   if (currentUser.role === "teacher") {
     q = db.collection("classes").where("teacherId", "==", currentUser.uid);
   } else if (currentUser.role === "student") {
-    // Provide fallback if department/year missing
     const dept = currentUser.department || "";
     const yr = currentUser.year || "";
     q = db.collection("classes").where("department", "==", dept).where("year", "==", yr);
