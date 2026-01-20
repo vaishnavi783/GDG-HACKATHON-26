@@ -122,7 +122,7 @@ function showDashboard() {
 async function generateQR() {
   if (!currentUser || currentUser.role !== "teacher") return;
 
-  const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
+  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
   if (snap.empty) {
     qrOutput.innerHTML = "<p>No classes assigned</p>";
     return;
@@ -132,8 +132,8 @@ async function generateQR() {
   for (const d of snap.docs) {
     const token = randomToken();
     await db.collection("qr_sessions").add({
-      classId: d.id,
-      teacherId: currentUser.uid,
+      classID: d.id,
+      teacherID: currentUser.uid,
       qrToken: token,
       validFrom: firebase.firestore.FieldValue.serverTimestamp(),
       validTill: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)),
@@ -150,7 +150,7 @@ async function loadEditableClasses() {
   if (!currentUser || currentUser.role !== "teacher") return;
 
   editClasses.innerHTML = "";
-  const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
+  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
   if (snap.empty) {
     editClasses.innerHTML = "<p>No classes to edit</p>";
     return;
@@ -171,7 +171,7 @@ async function updateClass(id) {
   const val = document.getElementById(`class-${id}`).value;
   await db.collection("classes").doc(id).update({ className: val });
   logAudit("CLASS_UPDATED");
-  loadEditableClasses(); // refresh after update
+  loadEditableClasses();
 }
 
 /* ===== TEACHER: CORRECTION REQUESTS ===== */
@@ -182,11 +182,11 @@ async function loadTeacherCorrections() {
   const snap = await db.collection("corrections").where("status", "==", "pending").get();
 
   for (const d of snap.docs) {
-    const classDoc = await db.collection("classes").doc(d.data().classId).get();
-    if (classDoc.exists && classDoc.data().teacherId === currentUser.uid) {
+    const classDoc = await db.collection("classes").doc(d.data().classID).get();
+    if (classDoc.exists && classDoc.data().teacherID === currentUser.uid) {
       correctionRequests.innerHTML += `
         <p>
-          ${d.data().studentId} - ${classDoc.data().className}
+          ${d.data().studentID || d.data().studentId} - ${classDoc.data().className}
           <button onclick="approveCorrection('${d.id}')">Approve</button>
         </p>
       `;
@@ -201,7 +201,7 @@ async function approveCorrection(id) {
     reviewedBy: currentUser.uid,
   });
   logAudit("CORRECTION_APPROVED");
-  loadTeacherCorrections(); // refresh after approve
+  loadTeacherCorrections();
 }
 
 /* ===== TODAY CLASSES (BOTH POVS) ===== */
@@ -211,7 +211,7 @@ async function loadTodayClasses() {
 
   let q;
   if (currentUser.role === "teacher") {
-    q = db.collection("classes").where("teacherId", "==", currentUser.uid);
+    q = db.collection("classes").where("teacherID", "==", currentUser.uid);
   } else if (currentUser.role === "student") {
     const dept = currentUser.department || "";
     const yr = currentUser.year || "";
