@@ -67,7 +67,6 @@ async function login() {
     if (dbRole !== role) throw new Error(`Role mismatch. Expected: ${dbRole}, got: ${role}`);
 
     currentUser = { uid: cred.user.uid, email: cred.user.email, ...doc.data() };
-
     console.log("Logged in user:", currentUser);
 
     logAudit("USER_LOGGED_IN");
@@ -98,36 +97,40 @@ function showDashboard() {
   // Hide all teacher/student tabs first
   document.querySelectorAll(".teacher-only, .student-only").forEach((e) => e.classList.add("hidden"));
 
-  console.log("Current role:", currentUser.role);
-
+  // TEACHER POV
   if (currentUser.role === "teacher") {
     console.log("Showing teacher tabs");
-    document.querySelectorAll(".teacher-only").forEach((e) => e.classList.remove("hidden"));
+    document.querySelectorAll(".teacher-only").forEach((el) => el.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
-  } else if (currentUser.role === "student") {
-    console.log("Showing student tabs");
-    document.querySelectorAll(".student-only").forEach((e) => e.classList.remove("hidden"));
-    getPrediction();
-  } else {
-    console.warn("Unknown role:", currentUser.role);
   }
 
+  // STUDENT POV
+  if (currentUser.role === "student") {
+    console.log("Showing student tabs");
+    document.querySelectorAll(".student-only").forEach((el) => el.classList.remove("hidden"));
+    getPrediction();
+  }
+
+  // Both roles see today's classes and audit logs
   loadTodayClasses();
   loadAuditLogs();
   loadAuditGraph();
 }
 
-/* ===== QR GENERATION (TEACHER ONLY) ===== */
+/* ===== TEACHER: QR GENERATION ===== */
 async function generateQR() {
-  if (currentUser.role !== "teacher") return;
+  if (!currentUser || currentUser.role !== "teacher") return;
 
   const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
-  let html = "";
+  if (snap.empty) {
+    qrOutput.innerHTML = "<p>No classes assigned</p>";
+    return;
+  }
 
+  let html = "";
   for (const d of snap.docs) {
     const token = randomToken();
-
     await db.collection("qr_sessions").add({
       classId: d.id,
       teacherId: currentUser.uid,
@@ -136,20 +139,22 @@ async function generateQR() {
       validTill: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)),
       active: true,
     });
-
     html += `<p><b>${d.data().className}</b>: ${token}</p>`;
     logAudit("QR_GENERATED");
   }
-
   qrOutput.innerHTML = html;
 }
 
-/* ===== EDIT CLASSES (TEACHER ONLY) ===== */
+/* ===== TEACHER: EDIT CLASSES ===== */
 async function loadEditableClasses() {
-  if (currentUser.role !== "teacher") return;
+  if (!currentUser || currentUser.role !== "teacher") return;
 
   editClasses.innerHTML = "";
   const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
+  if (snap.empty) {
+    editClasses.innerHTML = "<p>No classes to edit</p>";
+    return;
+  }
 
   snap.forEach((d) => {
     editClasses.innerHTML += `
@@ -162,163 +167,18 @@ async function loadEditableClasses() {
 }
 
 async function updateClass(id) {
-  if (currentUser.role !== "teacher") return;
-
+  if (!currentUser || currentUser.role !== "teacher") return;
   const val = document.getElementById(`class-${id}`).value;
   await db.collection("classes").doc(id).update({ className: val });
   logAudit("CLASS_UPDATED");
+  loadEditableClasses(); // refresh after update
 }
 
-/* ===== TODAY CLASSES (BOTH POVS) ===== */
-async function loadTodayClasses() {
-  todaysClasses.innerHTML = "";
-
-  let q;
-  if (currentUser.role === "teacher") {
-    q = db.collection("classes").where("teacherId", "==", currentUser.uid);
-  } else if (currentUser.role === "student") {
-    const dept = currentUser.department || "";
-    const yr = currentUser.year || "";
-    q = db.collection("classes").where("department", "==", dept).where("year", "==", yr);
-  } else {
-    return;
-  }
-
-  const snap = await q.get();
-
-  if (snap.empty) {
-    todaysClasses.innerHTML = "<p>No classes today</p>";
-    return;
-  }
-
-  snap.forEach((d) => {
-    todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
-  });
-}
-
-/* ===== AUDIT LOGS (BOTH POVS) ===== */
-async function loadAuditLogs() {
-  auditLogs.innerHTML = "";
-
-  const snap = await db
-    .collection("audit_logs")
-    .where("userId", "==", currentUser.uid)
-    .orderBy("timestamp", "desc")
-    .limit(10)
-    .get();
-
-  snap.forEach((d) => {
-    auditLogs.innerHTML += `<p>${d.data().action}</p>`;
-  });
-}
-
-function logAudit(action) {
-  db.collection("audit_logs").add({
-    userId: currentUser.uid,
-    role: currentUser.role,
-    action,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-  });
-}
-
-/* ===== AUDIT GRAPH (BOTH POVS) ===== */
-google.charts.load("current", { packages: ["corechart"] });
-async function loadAuditGraph() {
-  const snap = await db.collection("audit_logs").get();
-  const map = {};
-
-  snap.forEach((d) => {
-    const action = d.data().action;
-    map[action] = (map[action] || 0) + 1;
-  });
-
-  const rows = [["Action", "Count"]];
-  Object.entries(map).forEach(([a, c]) => rows.push([a, c]));
-
-  google.charts.setOnLoadCallback(() => {
-    const chart = new google.visualization.PieChart(auditGraph);
-    chart.draw(google.visualization.arrayToDataTable(rows));
-  });
-}
-
-/* ===== ATTENDANCE (STUDENT ONLY) ===== */
-async function markAttendance() {
-  if (currentUser.role !== "student") return;
-
-  const token = prompt("Enter QR Token");
-  if (!token) return;
-
-  const snap = await db.collection("qr_sessions").where("qrToken", "==", token).where("active", "==", true).get();
-  if (snap.empty) {
-    alert("Invalid QR");
-    return;
-  }
-
-  const { classId } = snap.docs[0].data();
-
-  const existing = await db
-    .collection("attendance")
-    .where("studentUid", "==", currentUser.uid)
-    .where("classId", "==", classId)
-    .where("date", "==", todayDate())
-    .get();
-
-  if (!existing.empty) {
-    alert("Attendance already marked");
-    return;
-  }
-
-  const geoDoc = await db.collection("geo_fences").doc("college").get();
-  const geo = geoDoc.data();
-
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const dist = getDistance(pos.coords.latitude, pos.coords.longitude, geo.latitude, geo.longitude);
-
-      if (dist > geo.radius) {
-        alert("Outside campus");
-        return;
-      }
-
-      await db.collection("attendance").add({
-        studentUid: currentUser.uid,
-        classId,
-        date: todayDate(),
-        status: "present",
-        markedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-
-      logAudit("ATTENDANCE_MARKED");
-      alert("Attendance marked successfully");
-    },
-    () => alert("Location access denied")
-  );
-}
-
-/* ===== CORRECTIONS (STUDENT REQUEST) ===== */
-async function requestCorrection() {
-  if (currentUser.role !== "student") return;
-
-  const classId = prompt("Class ID");
-  if (!classId) return;
-
-  await db.collection("corrections").add({
-    studentId: currentUser.uid,
-    classId,
-    date: todayDate(),
-    status: "pending",
-    requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
-  });
-
-  logAudit("CORRECTION_REQUESTED");
-}
-
-/* ===== CORRECTIONS (TEACHER VIEW + APPROVE) ===== */
+/* ===== TEACHER: CORRECTION REQUESTS ===== */
 async function loadTeacherCorrections() {
-  if (currentUser.role !== "teacher") return;
+  if (!currentUser || currentUser.role !== "teacher") return;
 
   correctionRequests.innerHTML = "";
-
   const snap = await db.collection("corrections").where("status", "==", "pending").get();
 
   for (const d of snap.docs) {
@@ -335,48 +195,84 @@ async function loadTeacherCorrections() {
 }
 
 async function approveCorrection(id) {
-  if (currentUser.role !== "teacher") return;
-
+  if (!currentUser || currentUser.role !== "teacher") return;
   await db.collection("corrections").doc(id).update({
     status: "approved",
     reviewedBy: currentUser.uid,
   });
   logAudit("CORRECTION_APPROVED");
+  loadTeacherCorrections(); // refresh after approve
 }
 
-/* ===== ATTENDANCE PREDICTION (STUDENT ONLY) ===== */
-async function getPrediction() {
-  if (currentUser.role !== "student") return;
+/* ===== TODAY CLASSES (BOTH POVS) ===== */
+async function loadTodayClasses() {
+  if (!currentUser) return;
+  todaysClasses.innerHTML = "";
 
-  statusEl.innerText = "Calculating...";
+  let q;
+  if (currentUser.role === "teacher") {
+    q = db.collection("classes").where("teacherId", "==", currentUser.uid);
+  } else if (currentUser.role === "student") {
+    const dept = currentUser.department || "";
+    const yr = currentUser.year || "";
+    q = db.collection("classes").where("department", "==", dept).where("year", "==", yr);
+  }
 
-  const dept = currentUser.department || "";
-  const yr = currentUser.year || "";
-
-  const classesSnap = await db
-    .collection("classes")
-    .where("department", "==", dept)
-    .where("year", "==", yr)
-    .get();
-
-  const totalClasses = classesSnap.size;
-  if (!totalClasses) {
-    statusEl.innerText = "No class data";
+  const snap = await q.get();
+  if (snap.empty) {
+    todaysClasses.innerHTML = "<p>No classes today</p>";
     return;
   }
 
-  const attendanceSnap = await db.collection("attendance").where("studentUid", "==", currentUser.uid).get();
-  const percentage = Math.round((attendanceSnap.size / totalClasses) * 100);
+  snap.forEach((d) => {
+    todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
+  });
+}
 
-  const prediction = percentage >= 75 ? "✅ Safe" : percentage >= 60 ? "⚠️ At Risk" : "❌ Critical";
+/* ===== AUDIT LOGS ===== */
+async function loadAuditLogs() {
+  if (!currentUser) return;
+  auditLogs.innerHTML = "";
 
-  await db.collection("predictions").doc(currentUser.uid).set({
-    studentUid: currentUser.uid,
-    attendancePercentage: percentage,
-    prediction,
-    calculatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  const snap = await db
+    .collection("audit_logs")
+    .where("userId", "==", currentUser.uid)
+    .orderBy("timestamp", "desc")
+    .limit(10)
+    .get();
+
+  snap.forEach((d) => {
+    auditLogs.innerHTML += `<p>${d.data().action}</p>`;
+  });
+}
+
+function logAudit(action) {
+  if (!currentUser) return;
+  db.collection("audit_logs").add({
+    userId: currentUser.uid,
+    role: currentUser.role,
+    action,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+/* ===== AUDIT GRAPH ===== */
+google.charts.load("current", { packages: ["corechart"] });
+async function loadAuditGraph() {
+  if (!currentUser) return;
+  const snap = await db.collection("audit_logs").get();
+  const map = {};
+
+  snap.forEach((d) => {
+    const action = d.data().action;
+    map[action] = (map[action] || 0) + 1;
   });
 
-  statusEl.innerHTML = `Attendance: <b>${percentage}%</b><br>Status: <b>${prediction}</b>`;
-  logAudit("PREDICTION_VIEWED");
+  const rows = [["Action", "Count"]];
+  Object.entries(map).forEach(([a, c]) => rows.push([a, c]));
+
+  google.charts.setOnLoadCallback(() => {
+    const chart = new google.visualization.PieChart(auditGraph);
+    chart.draw(google.visualization.arrayToDataTable(rows));
+  });
 }
