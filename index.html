@@ -25,12 +25,12 @@
       <option value="teacher">Teacher</option>
     </select>
     <button onclick="login()">Login</button>
-    <p id="login-error" class="error-msg"></p>
+    <p id="login-error" class="error-msg hidden"></p>
   </div>
 </div>
 
 <!-- DASHBOARD -->
-<div id="dashboard" style="display:none;">
+<div id="dashboard" class="hidden">
   <header>
     🌸 Smart Attendance & Wellness Portal
     <button onclick="logout()">Logout</button>
@@ -47,41 +47,41 @@
 
   <div class="dashboard-grid">
     <!-- TEACHER: Generate QR -->
-    <div class="card teacher-only">
+    <div class="card teacher-only hidden">
       <h3>📷 Generate QR</h3>
       <button onclick="generateQR()">Generate QR</button>
       <p id="qr-output"></p>
     </div>
 
     <!-- STUDENT: Scan QR -->
-    <div class="card student-only">
+    <div class="card student-only hidden">
       <h3>📷 Scan QR & Mark Attendance</h3>
       <button onclick="markAttendance()">Scan QR</button>
       <p id="attendance-status"></p>
     </div>
 
     <!-- STUDENT: Attendance Prediction -->
-    <div class="card student-only">
+    <div class="card student-only hidden">
       <h3>📊 Attendance Prediction</h3>
       <button onclick="getPrediction()">Predict Attendance Risk</button>
       <p id="prediction-status"></p>
     </div>
 
     <!-- STUDENT: Request Correction -->
-    <div class="card student-only">
+    <div class="card student-only hidden">
       <h3>🔐 Request Correction</h3>
       <button onclick="requestCorrection()">Request Correction</button>
       <p id="correction-status"></p>
     </div>
 
     <!-- TEACHER: View & Approve Corrections -->
-    <div class="card teacher-only">
+    <div class="card teacher-only hidden">
       <h3>✅ Pending Corrections</h3>
       <div id="correction-requests"></div>
     </div>
 
     <!-- TEACHER: Edit Classes -->
-    <div class="card teacher-only">
+    <div class="card teacher-only hidden">
       <h3>📝 Edit Today's Classes</h3>
       <div id="edit-classes"></div>
     </div>
