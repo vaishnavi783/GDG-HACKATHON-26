@@ -1,132 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Attend+</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <script src="https://www.gstatic.com/charts/loader.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Attend+</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
-  <!-- ================= LOGIN PAGE ================= -->
-  <div id="login-page">
-    <div class="card login-card">
-      <h2>Smart Attend+</h2>
-      <p class="sub">Fair • Transparent • Stress-Free</p>
-      <input id="email" type="email" placeholder="College Email" required>
-      <input id="password" type="password" placeholder="Password" required>
-      <select id="role">
-        <option value="student">Student</option>
-        <option value="teacher">Teacher</option>
-      </select>
-      <button onclick="login()">Login</button>
-      <p id="login-error" class="error-msg"></p>
+<!-- LOGIN PAGE -->
+<div id="login-page">
+  <div class="card login-card">
+    <h2>Smart Attend+</h2>
+    <p class="sub">Fair • Transparent • Stress-Free</p>
+    <input id="email" type="email" placeholder="College Email" required>
+    <input id="password" type="password" placeholder="Password" required>
+    <select id="role">
+      <option value="student">Student</option>
+      <option value="teacher">Teacher</option>
+    </select>
+    <button onclick="login()">Login</button>
+    <p id="login-error" class="error-msg"></p>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none;">
+  <header>
+    🌸 Smart Attendance & Wellness Portal
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <div class="user-info">
+    <div>
+      <span id="user-email"></span> | <span id="user-role"></span>
+    </div>
+    <div>
+      <span id="quoteText"></span>
     </div>
   </div>
 
-  <!-- ================= DASHBOARD ================= -->
-  <div id="dashboard" class="dashboard" style="display:none;">
-
-    <header>
-      🌸 Smart Attendance & Wellness Portal
-      <button onclick="logout()">Logout</button>
-    </header>
-
-    <div class="user-info">
-      <div>
-        <span id="user-email"></span> | <span id="user-role"></span>
-      </div>
-      <div>
-        <span id="quoteText"></span>
-      </div>
+  <div class="dashboard-grid">
+    <!-- TEACHER: Generate QR -->
+    <div class="card teacher-only">
+      <h3>📷 Generate QR</h3>
+      <button onclick="generateQR()">Generate QR</button>
+      <p id="qr-output"></p>
     </div>
 
-    <div class="dashboard-grid">
+    <!-- STUDENT: Scan QR -->
+    <div class="card student-only">
+      <h3>📷 Scan QR & Mark Attendance</h3>
+      <button onclick="markAttendance()">Scan QR</button>
+      <p id="attendance-status"></p>
+    </div>
 
-      <!-- TEACHER: GENERATE QR -->
-      <div class="card teacher-only">
-        <h3>📷 Generate QR</h3>
-        <button onclick="generateQR()">Generate QR</button>
-        <p id="qr-output"></p>
-      </div>
+    <!-- STUDENT: Attendance Prediction -->
+    <div class="card student-only">
+      <h3>📊 Attendance Prediction</h3>
+      <button onclick="getPrediction()">Predict Attendance Risk</button>
+      <p id="prediction-status"></p>
+    </div>
 
-      <!-- TEACHER: EDIT CLASSES -->
-      <div class="card teacher-only">
-        <h3>📝 Edit Today's Classes</h3>
-        <div id="edit-classes"></div>
-      </div>
+    <!-- STUDENT: Request Correction -->
+    <div class="card student-only">
+      <h3>🔐 Request Correction</h3>
+      <button onclick="requestCorrection()">Request Correction</button>
+      <p id="correction-status"></p>
+    </div>
 
-      <!-- TEACHER: VIEW & APPROVE/REJECT CORRECTIONS -->
-      <div class="card teacher-only">
-        <h3>✅ Pending Corrections</h3>
-        <div id="correction-requests"></div>
-      </div>
+    <!-- TEACHER: View & Approve Corrections -->
+    <div class="card teacher-only">
+      <h3>✅ Pending Corrections</h3>
+      <div id="correction-requests"></div>
+    </div>
 
-      <!-- TEACHER/STUDENT: TODAY'S CLASSES -->
-      <div class="card">
-        <h3>🎯 Today's Classes</h3>
-        <div id="todays-classes">
-          <p>No classes scheduled for today</p>
-        </div>
-      </div>
+    <!-- TEACHER: Edit Classes -->
+    <div class="card teacher-only">
+      <h3>📝 Edit Today's Classes</h3>
+      <div id="edit-classes"></div>
+    </div>
 
-      <!-- STUDENT: SCAN QR & MARK ATTENDANCE -->
-      <div class="card student-only">
-        <h3>📷 Scan QR & Mark Attendance</h3>
-        <button onclick="markAttendance()">Scan QR</button>
-        <p id="attendance-status"></p>
-      </div>
+    <!-- TODAY'S CLASSES -->
+    <div class="card">
+      <h3>🎯 Today's Classes</h3>
+      <div id="todays-classes"><p>No classes scheduled for today</p></div>
+    </div>
 
-      <!-- STUDENT: ATTENDANCE PREDICTION -->
-      <div class="card student-only">
-        <h3>📊 Attendance Prediction</h3>
-        <button onclick="getPrediction()">Predict Attendance Risk</button>
-        <p id="prediction-status"></p>
-      </div>
+    <!-- AUDIT LOGS -->
+    <div class="card">
+      <h3>🧾 Audit Logs</h3>
+      <div id="audit-logs"></div>
+    </div>
 
-      <!-- STUDENT: REQUEST CORRECTION -->
-      <div class="card student-only">
-        <h3>🔐 Request Correction</h3>
-        <button onclick="requestCorrection()">Request Correction</button>
-        <p id="correction-status"></p>
-      </div>
-
-      <!-- TEACHER/STUDENT: AUDIT LOGS -->
-      <div class="card">
-        <h3>🧾 Audit Logs</h3>
-        <div id="audit-logs"></div>
-      </div>
-
-      <!-- TEACHER/STUDENT: AUDIT GRAPH -->
-      <div class="card">
-        <h3>📈 Audit Graph</h3>
-        <div id="auditGraph" style="height:300px;"></div>
-      </div>
-
+    <!-- AUDIT GRAPH -->
+    <div class="card">
+      <h3>📈 Audit Graph</h3>
+      <div id="auditGraph" style="height:300px;"></div>
     </div>
   </div>
+</div>
 
-  <!-- ================= FIREBASE CONFIG ================= -->
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-      authDomain: "attendx-6be15.firebaseapp.com",
-      projectId: "attendx-6be15",
-      storageBucket: "attendx-6be15.appspot.com",
-      messagingSenderId: "593387890331",
-      appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-  </script>
+<!-- FIREBASE CONFIG -->
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
+  authDomain: "attendx-6be15.firebaseapp.com",
+  projectId: "attendx-6be15",
+  storageBucket: "attendx-6be15.appspot.com",
+  messagingSenderId: "593387890331",
+  appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+</script>
 
-  <!-- APP JS -->
-  <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
