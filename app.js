@@ -31,12 +31,12 @@ function randomToken() {
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
@@ -62,14 +62,9 @@ async function login() {
     const doc = await db.collection("users").doc(cred.user.uid).get();
 
     if (!doc.exists) throw new Error("User profile not found");
-    if (doc.data().role.toLowerCase() !== role)
-      throw new Error("Role mismatch");
+    if (doc.data().role.toLowerCase() !== role) throw new Error("Role mismatch");
 
-    currentUser = {
-      uid: cred.user.uid,
-      email: cred.user.email,
-      ...doc.data(),
-    };
+    currentUser = { uid: cred.user.uid, email: cred.user.email, ...doc.data() };
 
     logAudit("USER_LOGGED_IN");
     showDashboard();
@@ -99,7 +94,7 @@ function showDashboard() {
   if (currentUser.role === "teacher") {
     document.querySelectorAll(".teacher-only").forEach((e) => (e.style.display = "block"));
     loadEditableClasses();
-    loadCorrections();
+    loadTeacherCorrections();
   } else {
     document.querySelectorAll(".student-only").forEach((e) => (e.style.display = "block"));
     getPrediction();
@@ -112,6 +107,8 @@ function showDashboard() {
 
 /* ===== QR GENERATION (TEACHER ONLY) ===== */
 async function generateQR() {
+  if (currentUser.role !== "teacher") return;
+
   const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
   let html = "";
 
@@ -136,6 +133,8 @@ async function generateQR() {
 
 /* ===== EDIT CLASSES (TEACHER ONLY) ===== */
 async function loadEditableClasses() {
+  if (currentUser.role !== "teacher") return;
+
   editClasses.innerHTML = "";
   const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
 
@@ -150,6 +149,8 @@ async function loadEditableClasses() {
 }
 
 async function updateClass(id) {
+  if (currentUser.role !== "teacher") return;
+
   const val = document.getElementById(`class-${id}`).value;
   await db.collection("classes").doc(id).update({ className: val });
   logAudit("CLASS_UPDATED");
@@ -277,7 +278,7 @@ async function markAttendance() {
   );
 }
 
-/* ===== CORRECTIONS ===== */
+/* ===== CORRECTIONS (STUDENT REQUEST) ===== */
 async function requestCorrection() {
   if (currentUser.role !== "student") return;
 
@@ -295,24 +296,30 @@ async function requestCorrection() {
   logAudit("CORRECTION_REQUESTED");
 }
 
-/* ===== CORRECTIONS VIEW / APPROVE (TEACHER ONLY) ===== */
-async function loadCorrections() {
+/* ===== CORRECTIONS (TEACHER VIEW + APPROVE) ===== */
+async function loadTeacherCorrections() {
   if (currentUser.role !== "teacher") return;
 
   correctionRequests.innerHTML = "";
 
   const snap = await db.collection("corrections").where("status", "==", "pending").get();
-  snap.forEach((d) => {
-    correctionRequests.innerHTML += `
-      <p>
-        ${d.data().studentId} 
-        <button onclick="approveCorrection('${d.id}')">Approve</button>
-      </p>
-    `;
-  });
+
+  for (const d of snap.docs) {
+    const classDoc = await db.collection("classes").doc(d.data().classId).get();
+    if (classDoc.exists && classDoc.data().teacherId === currentUser.uid) {
+      correctionRequests.innerHTML += `
+        <p>
+          ${d.data().studentId} - ${classDoc.data().className}
+          <button onclick="approveCorrection('${d.id}')">Approve</button>
+        </p>
+      `;
+    }
+  }
 }
 
 async function approveCorrection(id) {
+  if (currentUser.role !== "teacher") return;
+
   await db.collection("corrections").doc(id).update({
     status: "approved",
     reviewedBy: currentUser.uid,
@@ -326,7 +333,12 @@ async function getPrediction() {
 
   statusEl.innerText = "Calculating...";
 
-  const classesSnap = await db.collection("classes").where("department", "==", currentUser.department).where("year", "==", currentUser.year).get();
+  const classesSnap = await db
+    .collection("classes")
+    .where("department", "==", currentUser.department)
+    .where("year", "==", currentUser.year)
+    .get();
+
   const totalClasses = classesSnap.size;
   if (!totalClasses) {
     statusEl.innerText = "No class data";
@@ -336,7 +348,7 @@ async function getPrediction() {
   const attendanceSnap = await db.collection("attendance").where("studentUid", "==", currentUser.uid).get();
   const percentage = Math.round((attendanceSnap.size / totalClasses) * 100);
 
-  let prediction = percentage >= 75 ? "✅ Safe" : percentage >= 60 ? "⚠️ At Risk" : "❌ Critical";
+  const prediction = percentage >= 75 ? "✅ Safe" : percentage >= 60 ? "⚠️ At Risk" : "❌ Critical";
 
   await db.collection("predictions").doc(currentUser.uid).set({
     studentUid: currentUser.uid,
