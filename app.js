@@ -29,18 +29,6 @@ function randomToken() {
   return Math.random().toString(36).substring(2, 10).toUpperCase();
 }
 
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 /* ===== LOGIN ===== */
 async function login() {
   const email = emailInput.value.trim();
@@ -97,22 +85,17 @@ function showDashboard() {
   // Hide all teacher/student tabs first
   document.querySelectorAll(".teacher-only, .student-only").forEach((e) => e.classList.add("hidden"));
 
-  // TEACHER POV
   if (currentUser.role === "teacher") {
-    console.log("Showing teacher tabs");
     document.querySelectorAll(".teacher-only").forEach((el) => el.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
-  // STUDENT POV
   if (currentUser.role === "student") {
-    console.log("Showing student tabs");
     document.querySelectorAll(".student-only").forEach((el) => el.classList.remove("hidden"));
     getPrediction();
   }
 
-  // Both roles see today's classes and audit logs
   loadTodayClasses();
   loadAuditLogs();
   loadAuditGraph();
@@ -182,12 +165,15 @@ async function loadTeacherCorrections() {
   const snap = await db.collection("corrections").where("status", "==", "pending").get();
 
   for (const d of snap.docs) {
-    const classDoc = await db.collection("classes").doc(d.data().classID).get();
+    const classID = d.data().classID;
+    if (!classID) continue;
+    const classDoc = await db.collection("classes").doc(classID).get();
     if (classDoc.exists && classDoc.data().teacherID === currentUser.uid) {
       correctionRequests.innerHTML += `
         <p>
-          ${d.data().studentID || d.data().studentId} - ${classDoc.data().className}
+          ${d.data().studentID} - ${classDoc.data().className}
           <button onclick="approveCorrection('${d.id}')">Approve</button>
+          <button onclick="rejectCorrection('${d.id}')">Reject</button>
         </p>
       `;
     }
@@ -201,6 +187,16 @@ async function approveCorrection(id) {
     reviewedBy: currentUser.uid,
   });
   logAudit("CORRECTION_APPROVED");
+  loadTeacherCorrections();
+}
+
+async function rejectCorrection(id) {
+  if (!currentUser || currentUser.role !== "teacher") return;
+  await db.collection("corrections").doc(id).update({
+    status: "rejected",
+    reviewedBy: currentUser.uid,
+  });
+  logAudit("CORRECTION_REJECTED");
   loadTeacherCorrections();
 }
 
