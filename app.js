@@ -47,6 +47,7 @@ async function login() {
   const password = passwordInput.value;
   const role = roleSelect.value.toLowerCase();
   const err = document.getElementById("login-error");
+
   err.style.display = "none";
   err.innerText = "";
 
@@ -59,17 +60,20 @@ async function login() {
   try {
     const cred = await auth.signInWithEmailAndPassword(email, password);
     const doc = await db.collection("users").doc(cred.user.uid).get();
-    if (!doc.exists) throw new Error("User profile not found");
 
+    if (!doc.exists) throw new Error("User profile not found");
     if (doc.data().role.toLowerCase() !== role)
       throw new Error("Role mismatch");
 
-    currentUser = { uid: cred.user.uid, email: cred.user.email, ...doc.data() };
+    currentUser = {
+      uid: cred.user.uid,
+      email: cred.user.email,
+      ...doc.data(),
+    };
 
     logAudit("USER_LOGGED_IN");
     showDashboard();
   } catch (e) {
-    console.error(e);
     err.innerText = e.message;
     err.style.display = "block";
   }
@@ -80,7 +84,7 @@ function logout() {
   location.reload();
 }
 
-/* ===== DASHBOARD ===== */
+/* ===== DASHBOARD ROLE SWITCH ===== */
 function showDashboard() {
   loginPage.style.display = "none";
   dashboard.style.display = "block";
@@ -89,16 +93,16 @@ function showDashboard() {
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
-  document.querySelectorAll(".teacher-only").forEach(e => (e.style.display = "none"));
-  document.querySelectorAll(".student-only").forEach(e => (e.style.display = "none"));
+  document.querySelectorAll(".teacher-only").forEach((e) => (e.style.display = "none"));
+  document.querySelectorAll(".student-only").forEach((e) => (e.style.display = "none"));
 
   if (currentUser.role === "teacher") {
-    document.querySelectorAll(".teacher-only").forEach(e => (e.style.display = "block"));
-    loadCorrections();
+    document.querySelectorAll(".teacher-only").forEach((e) => (e.style.display = "block"));
     loadEditableClasses();
+    loadCorrections();
   } else {
-    document.querySelectorAll(".student-only").forEach(e => (e.style.display = "block"));
-    getPrediction(); // auto-load student prediction
+    document.querySelectorAll(".student-only").forEach((e) => (e.style.display = "block"));
+    getPrediction();
   }
 
   loadTodayClasses();
@@ -106,36 +110,42 @@ function showDashboard() {
   loadAuditGraph();
 }
 
-/* ===== QR ===== */
+/* ===== QR GENERATION (TEACHER ONLY) ===== */
 async function generateQR() {
   const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
   let html = "";
+
   for (const d of snap.docs) {
     const token = randomToken();
+
     await db.collection("qr_sessions").add({
       classId: d.id,
       teacherId: currentUser.uid,
       qrToken: token,
       validFrom: firebase.firestore.FieldValue.serverTimestamp(),
       validTill: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)),
-      active: true
+      active: true,
     });
-    html += `<p><b>${d.data().className}:</b> ${token}</p>`;
+
+    html += `<p><b>${d.data().className}</b>: ${token}</p>`;
     logAudit("QR_GENERATED");
   }
+
   qrOutput.innerHTML = html;
 }
 
-/* ===== EDIT CLASSES ===== */
+/* ===== EDIT CLASSES (TEACHER ONLY) ===== */
 async function loadEditableClasses() {
   editClasses.innerHTML = "";
   const snap = await db.collection("classes").where("teacherId", "==", currentUser.uid).get();
-  snap.forEach(d => {
+
+  snap.forEach((d) => {
     editClasses.innerHTML += `
       <p>
         <input id="class-${d.id}" value="${d.data().className}">
         <button onclick="updateClass('${d.id}')">Update</button>
-      </p>`;
+      </p>
+    `;
   });
 }
 
@@ -145,10 +155,11 @@ async function updateClass(id) {
   logAudit("CLASS_UPDATED");
 }
 
-/* ===== TODAY CLASSES ===== */
+/* ===== TODAY CLASSES (BOTH POVS) ===== */
 async function loadTodayClasses() {
   todaysClasses.innerHTML = "";
-  let q =
+
+  const q =
     currentUser.role === "teacher"
       ? db.collection("classes").where("teacherId", "==", currentUser.uid)
       : db.collection("classes")
@@ -156,24 +167,29 @@ async function loadTodayClasses() {
           .where("year", "==", currentUser.year);
 
   const snap = await q.get();
+
   if (snap.empty) {
-    todaysClasses.innerHTML = "<p>No classes scheduled for today</p>";
+    todaysClasses.innerHTML = "<p>No classes today</p>";
     return;
   }
 
-  snap.forEach(d => {
+  snap.forEach((d) => {
     todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
   });
 }
 
-/* ===== AUDIT LOGS ===== */
+/* ===== AUDIT LOGS (BOTH POVS) ===== */
 async function loadAuditLogs() {
   auditLogs.innerHTML = "";
-  const snap = await db.collection("audit_logs")
+
+  const snap = await db
+    .collection("audit_logs")
     .where("userId", "==", currentUser.uid)
     .orderBy("timestamp", "desc")
-    .limit(10).get();
-  snap.forEach(d => {
+    .limit(10)
+    .get();
+
+  snap.forEach((d) => {
     auditLogs.innerHTML += `<p>${d.data().action}</p>`;
   });
 }
@@ -183,22 +199,23 @@ function logAudit(action) {
     userId: currentUser.uid,
     role: currentUser.role,
     action,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
   });
 }
 
-/* ===== AUDIT GRAPH ===== */
+/* ===== AUDIT GRAPH (BOTH POVS) ===== */
 google.charts.load("current", { packages: ["corechart"] });
 async function loadAuditGraph() {
   const snap = await db.collection("audit_logs").get();
   const map = {};
-  snap.forEach(d => {
+
+  snap.forEach((d) => {
     const action = d.data().action;
     map[action] = (map[action] || 0) + 1;
   });
 
   const rows = [["Action", "Count"]];
-  Object.entries(map).forEach(([action, count]) => rows.push([action, count]));
+  Object.entries(map).forEach(([a, c]) => rows.push([a, c]));
 
   google.charts.setOnLoadCallback(() => {
     const chart = new google.visualization.PieChart(auditGraph);
@@ -206,36 +223,64 @@ async function loadAuditGraph() {
   });
 }
 
-/* ===== ATTENDANCE ===== */
+/* ===== ATTENDANCE (STUDENT ONLY) ===== */
 async function markAttendance() {
+  if (currentUser.role !== "student") return;
+
   const token = prompt("Enter QR Token");
   if (!token) return;
 
-  const snap = await db.collection("qr_sessions")
-    .where("qrToken", "==", token)
-    .where("active", "==", true).get();
-  if (snap.empty) return alert("Invalid QR");
+  const snap = await db.collection("qr_sessions").where("qrToken", "==", token).where("active", "==", true).get();
+  if (snap.empty) {
+    alert("Invalid QR");
+    return;
+  }
 
-  const geo = (await db.collection("geo_fences").doc("college").get()).data();
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const d = getDistance(pos.coords.latitude, pos.coords.longitude, geo.latitude, geo.longitude);
-    if (d > geo.radius) return alert("Outside geofence");
+  const { classId } = snap.docs[0].data();
 
-    await db.collection("attendance").add({
-      studentUid: currentUser.uid,
-      classId: snap.docs[0].data().classId,
-      date: todayDate(),
-      status: "present",
-      markedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+  const existing = await db
+    .collection("attendance")
+    .where("studentUid", "==", currentUser.uid)
+    .where("classId", "==", classId)
+    .where("date", "==", todayDate())
+    .get();
 
-    logAudit("ATTENDANCE_MARKED");
-    alert("Attendance marked");
-  }, () => alert("Location access denied"));
+  if (!existing.empty) {
+    alert("Attendance already marked");
+    return;
+  }
+
+  const geoDoc = await db.collection("geo_fences").doc("college").get();
+  const geo = geoDoc.data();
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const dist = getDistance(pos.coords.latitude, pos.coords.longitude, geo.latitude, geo.longitude);
+
+      if (dist > geo.radius) {
+        alert("Outside campus");
+        return;
+      }
+
+      await db.collection("attendance").add({
+        studentUid: currentUser.uid,
+        classId,
+        date: todayDate(),
+        status: "present",
+        markedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+
+      logAudit("ATTENDANCE_MARKED");
+      alert("Attendance marked successfully");
+    },
+    () => alert("Location access denied")
+  );
 }
 
 /* ===== CORRECTIONS ===== */
 async function requestCorrection() {
+  if (currentUser.role !== "student") return;
+
   const classId = prompt("Class ID");
   if (!classId) return;
 
@@ -244,69 +289,62 @@ async function requestCorrection() {
     classId,
     date: todayDate(),
     status: "pending",
-    requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+    requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
 
   logAudit("CORRECTION_REQUESTED");
 }
 
+/* ===== CORRECTIONS VIEW / APPROVE (TEACHER ONLY) ===== */
 async function loadCorrections() {
+  if (currentUser.role !== "teacher") return;
+
   correctionRequests.innerHTML = "";
+
   const snap = await db.collection("corrections").where("status", "==", "pending").get();
-  snap.forEach(d => {
+  snap.forEach((d) => {
     correctionRequests.innerHTML += `
-      <p>${d.data().studentId} <button onclick="approveCorrection('${d.id}')">Approve</button></p>`;
+      <p>
+        ${d.data().studentId} 
+        <button onclick="approveCorrection('${d.id}')">Approve</button>
+      </p>
+    `;
   });
 }
 
 async function approveCorrection(id) {
   await db.collection("corrections").doc(id).update({
     status: "approved",
-    reviewedBy: currentUser.uid
+    reviewedBy: currentUser.uid,
   });
   logAudit("CORRECTION_APPROVED");
 }
 
-/* ===== ATTENDANCE PREDICTION ===== */
+/* ===== ATTENDANCE PREDICTION (STUDENT ONLY) ===== */
 async function getPrediction() {
   if (currentUser.role !== "student") return;
 
   statusEl.innerText = "Calculating...";
-  try {
-    const classesSnap = await db.collection("classes")
-      .where("department", "==", currentUser.department)
-      .where("year", "==", currentUser.year)
-      .get();
 
-    const totalClasses = classesSnap.size;
-    if (totalClasses === 0) {
-      statusEl.innerText = "No class data available";
-      return;
-    }
-
-    const attendanceSnap = await db.collection("attendance")
-      .where("studentUid", "==", currentUser.uid)
-      .get();
-
-    const attended = attendanceSnap.size;
-    const percentage = Math.round((attended / totalClasses) * 100);
-
-    let prediction;
-    if (percentage >= 75) prediction = "✅ Safe";
-    else if (percentage >= 60) prediction = "⚠️ At Risk";
-    else prediction = "❌ Critical";
-
-    await db.collection("predictions").doc(currentUser.uid).set({
-      studentUid: currentUser.uid,
-      attendancePercentage: percentage,
-      prediction,
-      calculatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    statusEl.innerHTML = `Attendance: <b>${percentage}%</b><br>Status: <b>${prediction}</b>`;
-    logAudit("PREDICTION_VIEWED");
-  } catch (err) {
-    statusEl.innerText = "Prediction failed";
-    console.error(err);
+  const classesSnap = await db.collection("classes").where("department", "==", currentUser.department).where("year", "==", currentUser.year).get();
+  const totalClasses = classesSnap.size;
+  if (!totalClasses) {
+    statusEl.innerText = "No class data";
+    return;
   }
+
+  const attendanceSnap = await db.collection("attendance").where("studentUid", "==", currentUser.uid).get();
+  const percentage = Math.round((attendanceSnap.size / totalClasses) * 100);
+
+  let prediction = percentage >= 75 ? "✅ Safe" : percentage >= 60 ? "⚠️ At Risk" : "❌ Critical";
+
+  await db.collection("predictions").doc(currentUser.uid).set({
+    studentUid: currentUser.uid,
+    attendancePercentage: percentage,
+    prediction,
+    calculatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+
+  statusEl.innerHTML = `Attendance: <b>${percentage}%</b><br>Status: <b>${prediction}</b>`;
+  logAudit("PREDICTION_VIEWED");
 }
