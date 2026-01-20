@@ -62,13 +62,18 @@ async function login() {
     const doc = await db.collection("users").doc(cred.user.uid).get();
 
     if (!doc.exists) throw new Error("User profile not found");
-    if (doc.data().role.toLowerCase() !== role) throw new Error("Role mismatch");
+
+    const dbRole = doc.data().role?.toLowerCase();
+    if (dbRole !== role) throw new Error(`Role mismatch. Expected: ${dbRole}, got: ${role}`);
 
     currentUser = { uid: cred.user.uid, email: cred.user.email, ...doc.data() };
+
+    console.log("Logged in user:", currentUser); // debug
 
     logAudit("USER_LOGGED_IN");
     showDashboard();
   } catch (e) {
+    console.error(e);
     err.innerText = e.message;
     err.style.display = "block";
   }
@@ -81,6 +86,8 @@ function logout() {
 
 /* ===== DASHBOARD ROLE SWITCH ===== */
 function showDashboard() {
+  if (!currentUser) return;
+
   loginPage.style.display = "none";
   dashboard.style.display = "block";
 
@@ -88,16 +95,23 @@ function showDashboard() {
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
+  // Hide all first
   document.querySelectorAll(".teacher-only").forEach((e) => (e.style.display = "none"));
   document.querySelectorAll(".student-only").forEach((e) => (e.style.display = "none"));
 
+  console.log("Current role:", currentUser.role); // debug
+
   if (currentUser.role === "teacher") {
+    console.log("Showing teacher tabs");
     document.querySelectorAll(".teacher-only").forEach((e) => (e.style.display = "block"));
     loadEditableClasses();
     loadTeacherCorrections();
-  } else {
+  } else if (currentUser.role === "student") {
+    console.log("Showing student tabs");
     document.querySelectorAll(".student-only").forEach((e) => (e.style.display = "block"));
     getPrediction();
+  } else {
+    console.warn("Unknown role:", currentUser.role);
   }
 
   loadTodayClasses();
@@ -160,12 +174,17 @@ async function updateClass(id) {
 async function loadTodayClasses() {
   todaysClasses.innerHTML = "";
 
-  const q =
-    currentUser.role === "teacher"
-      ? db.collection("classes").where("teacherId", "==", currentUser.uid)
-      : db.collection("classes")
-          .where("department", "==", currentUser.department)
-          .where("year", "==", currentUser.year);
+  let q;
+  if (currentUser.role === "teacher") {
+    q = db.collection("classes").where("teacherId", "==", currentUser.uid);
+  } else if (currentUser.role === "student") {
+    // Provide fallback if department/year missing
+    const dept = currentUser.department || "";
+    const yr = currentUser.year || "";
+    q = db.collection("classes").where("department", "==", dept).where("year", "==", yr);
+  } else {
+    return;
+  }
 
   const snap = await q.get();
 
@@ -333,10 +352,13 @@ async function getPrediction() {
 
   statusEl.innerText = "Calculating...";
 
+  const dept = currentUser.department || "";
+  const yr = currentUser.year || "";
+
   const classesSnap = await db
     .collection("classes")
-    .where("department", "==", currentUser.department)
-    .where("year", "==", currentUser.year)
+    .where("department", "==", dept)
+    .where("year", "==", yr)
     .get();
 
   const totalClasses = classesSnap.size;
