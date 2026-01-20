@@ -1,3 +1,8 @@
+/* ===== GLOBAL ERROR SAFETY ===== */
+window.onerror = (msg, src, line) => {
+  console.error("UI Error:", msg, "Line:", line);
+};
+
 /* ===== DOM REFERENCES ===== */
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
@@ -21,13 +26,9 @@ const statusEl = document.getElementById("prediction-status");
 let currentUser = null;
 
 /* ===== UTILS ===== */
-function todayDate() {
-  return new Date().toISOString().split("T")[0];
-}
-
-function randomToken() {
-  return Math.random().toString(36).substring(2, 10).toUpperCase();
-}
+const todayDate = () => new Date().toISOString().split("T")[0];
+const todayName = () => new Date().toLocaleString("en-US", { weekday: "long" });
+const randomToken = () => Math.random().toString(36).substring(2, 10).toUpperCase();
 
 /* ===== LOGIN ===== */
 async function login() {
@@ -36,45 +37,26 @@ async function login() {
   const role = roleSelect.value.toLowerCase();
   const err = document.getElementById("login-error");
 
-  err.classList.add("hidden");
   err.innerText = "";
-
-  if (!email || !password) {
-    err.innerText = "Please enter email and password";
-    err.classList.remove("hidden");
-    return;
-  }
 
   try {
     const cred = await auth.signInWithEmailAndPassword(email, password);
-    const doc = await db.collection("users").doc(cred.user.uid).get();
+    const snap = await db.collection("users").doc(cred.user.uid).get();
 
-    if (!doc.exists) throw new Error("User profile not found");
+    if (!snap.exists) throw "User profile missing";
 
-    const dbRole = doc.data().role?.toLowerCase();
-    if (dbRole !== role) throw new Error(`Role mismatch. Expected: ${dbRole}, got: ${role}`);
+    if (snap.data().role.toLowerCase() !== role) throw "Role mismatch";
 
-    currentUser = { uid: cred.user.uid, email: cred.user.email, ...doc.data() };
-    console.log("Logged in user:", currentUser);
-
-    logAudit("USER_LOGGED_IN");
+    currentUser = { uid: cred.user.uid, ...snap.data() };
+    logAudit("LOGIN");
     showDashboard();
   } catch (e) {
-    console.error(e);
-    err.innerText = e.message;
-    err.classList.remove("hidden");
+    err.innerText = e;
   }
 }
 
-function logout() {
-  auth.signOut();
-  location.reload();
-}
-
-/* ===== DASHBOARD ROLE SWITCH ===== */
+/* ===== DASHBOARD ===== */
 function showDashboard() {
-  if (!currentUser) return;
-
   loginPage.classList.add("hidden");
   dashboard.classList.remove("hidden");
 
@@ -82,18 +64,18 @@ function showDashboard() {
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
-  // Hide all teacher/student tabs first
-  document.querySelectorAll(".teacher-only, .student-only").forEach((e) => e.classList.add("hidden"));
+  document.querySelectorAll(".teacher-only,.student-only")
+    .forEach(e => e.classList.add("hidden"));
 
   if (currentUser.role === "teacher") {
-    document.querySelectorAll(".teacher-only").forEach((el) => el.classList.remove("hidden"));
+    document.querySelectorAll(".teacher-only").forEach(e => e.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
   if (currentUser.role === "student") {
-    document.querySelectorAll(".student-only").forEach((el) => el.classList.remove("hidden"));
-    getPrediction();
+    document.querySelectorAll(".student-only").forEach(e => e.classList.remove("hidden"));
+    getPredictionSafe();
   }
 
   loadTodayClasses();
@@ -101,174 +83,151 @@ function showDashboard() {
   loadAuditGraph();
 }
 
-/* ===== TEACHER: QR GENERATION ===== */
+/* ===== TEACHER: GENERATE QR ===== */
 async function generateQR() {
-  if (!currentUser || currentUser.role !== "teacher") return;
+  const snap = await db.collection("classes")
+    .where("teacherID", "==", currentUser.uid)
+    .get();
 
-  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
   if (snap.empty) {
     qrOutput.innerHTML = "<p>No classes assigned</p>";
     return;
   }
 
-  let html = "";
+  qrOutput.innerHTML = "";
+
   for (const d of snap.docs) {
     const token = randomToken();
+
     await db.collection("qr_sessions").add({
       classID: d.id,
       teacherID: currentUser.uid,
       qrToken: token,
-      validFrom: firebase.firestore.FieldValue.serverTimestamp(),
-      validTill: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)),
-      active: true,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      active: true
     });
-    html += `<p><b>${d.data().className}</b>: ${token}</p>`;
-    logAudit("QR_GENERATED");
+
+    qrOutput.innerHTML += `<p><b>${d.data().className}</b>: ${token}</p>`;
   }
-  qrOutput.innerHTML = html;
+
+  logAudit("QR_CREATED");
 }
 
-/* ===== TEACHER: EDIT CLASSES ===== */
-async function loadEditableClasses() {
-  if (!currentUser || currentUser.role !== "teacher") return;
+/* ===== STUDENT: SCAN QR ===== */
+async function scanQR() {
+  const token = prompt("Enter QR token");
+  if (!token) return;
 
-  editClasses.innerHTML = "";
-  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
+  const snap = await db.collection("qr_sessions")
+    .where("qrToken", "==", token)
+    .where("active", "==", true)
+    .get();
+
   if (snap.empty) {
-    editClasses.innerHTML = "<p>No classes to edit</p>";
+    alert("Invalid or expired QR");
     return;
   }
 
-  snap.forEach((d) => {
-    editClasses.innerHTML += `
-      <p>
-        <input id="class-${d.id}" value="${d.data().className}">
-        <button onclick="updateClass('${d.id}')">Update</button>
-      </p>
-    `;
+  const qr = snap.docs[0];
+
+  if (qr.data().expiresAt < Date.now()) {
+    alert("QR expired");
+    return;
+  }
+
+  await db.collection("attendance").add({
+    studentID: currentUser.uid,
+    classID: qr.data().classID,
+    date: todayDate(),
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
   });
+
+  alert("Attendance marked");
+  logAudit("ATTENDANCE_MARKED");
 }
 
-async function updateClass(id) {
-  if (!currentUser || currentUser.role !== "teacher") return;
-  const val = document.getElementById(`class-${id}`).value;
-  await db.collection("classes").doc(id).update({ className: val });
-  logAudit("CLASS_UPDATED");
-  loadEditableClasses();
+/* ===== STUDENT: REQUEST CORRECTION ===== */
+async function requestCorrection(classID) {
+  await db.collection("corrections").add({
+    studentID: currentUser.uid,
+    classID,
+    status: "pending",
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  alert("Correction requested");
 }
 
-/* ===== TEACHER: CORRECTION REQUESTS ===== */
-async function loadTeacherCorrections() {
-  if (!currentUser || currentUser.role !== "teacher") return;
-
-  correctionRequests.innerHTML = "";
-  const snap = await db.collection("corrections").where("status", "==", "pending").get();
-
-  for (const d of snap.docs) {
-    const classID = d.data().classID;
-    if (!classID) continue;
-    const classDoc = await db.collection("classes").doc(classID).get();
-    if (classDoc.exists && classDoc.data().teacherID === currentUser.uid) {
-      correctionRequests.innerHTML += `
-        <p>
-          ${d.data().studentID} - ${classDoc.data().className}
-          <button onclick="approveCorrection('${d.id}')">Approve</button>
-          <button onclick="rejectCorrection('${d.id}')">Reject</button>
-        </p>
-      `;
-    }
+/* ===== PREDICTION ===== */
+async function getPredictionSafe() {
+  try {
+    const doc = await db.collection("predictions").doc(currentUser.uid).get();
+    statusEl.innerText = doc.exists ? doc.data().prediction : "No prediction";
+  } catch {
+    statusEl.innerText = "Prediction unavailable";
   }
 }
 
-async function approveCorrection(id) {
-  if (!currentUser || currentUser.role !== "teacher") return;
-  await db.collection("corrections").doc(id).update({
-    status: "approved",
-    reviewedBy: currentUser.uid,
-  });
-  logAudit("CORRECTION_APPROVED");
-  loadTeacherCorrections();
-}
-
-async function rejectCorrection(id) {
-  if (!currentUser || currentUser.role !== "teacher") return;
-  await db.collection("corrections").doc(id).update({
-    status: "rejected",
-    reviewedBy: currentUser.uid,
-  });
-  logAudit("CORRECTION_REJECTED");
-  loadTeacherCorrections();
-}
-
-/* ===== TODAY CLASSES (BOTH POVS) ===== */
+/* ===== TODAY CLASSES ===== */
 async function loadTodayClasses() {
-  if (!currentUser) return;
   todaysClasses.innerHTML = "";
+  const today = todayName();
 
-  let q;
-  if (currentUser.role === "teacher") {
-    q = db.collection("classes").where("teacherID", "==", currentUser.uid);
-  } else if (currentUser.role === "student") {
-    const dept = currentUser.department || "";
-    const yr = currentUser.year || "";
-    q = db.collection("classes").where("department", "==", dept).where("year", "==", yr);
-  }
+  const q = currentUser.role === "teacher"
+    ? db.collection("classes").where("teacherID", "==", currentUser.uid)
+    : db.collection("classes")
+        .where("department", "==", currentUser.department)
+        .where("year", "==", currentUser.year);
 
   const snap = await q.get();
-  if (snap.empty) {
-    todaysClasses.innerHTML = "<p>No classes today</p>";
-    return;
-  }
+  let found = false;
 
-  snap.forEach((d) => {
-    todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
+  snap.forEach(d => {
+    if ((d.data().days || []).includes(today)) {
+      found = true;
+      todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
+    }
+  });
+
+  if (!found) todaysClasses.innerHTML = "<p>No classes today</p>";
+}
+
+/* ===== AUDIT ===== */
+function logAudit(action) {
+  db.collection("audit_logs").add({
+    userId: currentUser.uid,
+    role: currentUser.role,
+    action,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
 
-/* ===== AUDIT LOGS ===== */
 async function loadAuditLogs() {
-  if (!currentUser) return;
   auditLogs.innerHTML = "";
-
-  const snap = await db
-    .collection("audit_logs")
+  const snap = await db.collection("audit_logs")
     .where("userId", "==", currentUser.uid)
     .orderBy("timestamp", "desc")
     .limit(10)
     .get();
 
-  snap.forEach((d) => {
+  snap.forEach(d => {
     auditLogs.innerHTML += `<p>${d.data().action}</p>`;
   });
 }
 
-function logAudit(action) {
-  if (!currentUser) return;
-  db.collection("audit_logs").add({
-    userId: currentUser.uid,
-    role: currentUser.role,
-    action,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-  });
-}
-
-/* ===== AUDIT GRAPH ===== */
+/* ===== GRAPH ===== */
 google.charts.load("current", { packages: ["corechart"] });
 async function loadAuditGraph() {
-  if (!currentUser) return;
   const snap = await db.collection("audit_logs").get();
   const map = {};
 
-  snap.forEach((d) => {
-    const action = d.data().action;
-    map[action] = (map[action] || 0) + 1;
+  snap.forEach(d => {
+    map[d.data().action] = (map[d.data().action] || 0) + 1;
   });
 
-  const rows = [["Action", "Count"]];
-  Object.entries(map).forEach(([a, c]) => rows.push([a, c]));
-
+  const rows = [["Action", "Count"], ...Object.entries(map)];
   google.charts.setOnLoadCallback(() => {
-    const chart = new google.visualization.PieChart(auditGraph);
-    chart.draw(google.visualization.arrayToDataTable(rows));
+    new google.visualization.PieChart(auditGraph)
+      .draw(google.visualization.arrayToDataTable(rows));
   });
 }
