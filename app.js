@@ -1,9 +1,9 @@
-/* ===== GLOBAL ERROR SAFETY ===== */
+/* ================= GLOBAL ERROR SAFETY ================= */
 window.onerror = (msg, src, line) => {
   console.error("UI Error:", msg, "Line:", line);
 };
 
-/* ===== DOM REFERENCES ===== */
+/* ================= DOM REFERENCES ================= */
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const roleSelect = document.getElementById("role");
@@ -27,12 +27,12 @@ const correctionStatus = document.getElementById("correction-status");
 
 let currentUser = null;
 
-/* ===== UTILS ===== */
+/* ================= UTILS ================= */
 const todayDate = () => new Date().toISOString().split("T")[0];
 const todayName = () => new Date().toLocaleString("en-US", { weekday: "long" });
 const randomToken = () => Math.random().toString(36).substring(2, 10).toUpperCase();
 
-/* ===== LOGIN ===== */
+/* ================= LOGIN ================= */
 async function login() {
   try {
     const cred = await auth.signInWithEmailAndPassword(
@@ -55,13 +55,13 @@ async function login() {
   }
 }
 
-/* ===== LOGOUT ===== */
+/* ================= LOGOUT ================= */
 function logout() {
   auth.signOut();
   location.reload();
 }
 
-/* ===== DASHBOARD ===== */
+/* ================= DASHBOARD ================= */
 function showDashboard() {
   loginPage.classList.add("hidden");
   dashboard.classList.remove("hidden");
@@ -70,17 +70,17 @@ function showDashboard() {
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
-  // Hide all role-specific cards initially
-  document.querySelectorAll(".teacher-only, .student-only").forEach(el => el.classList.add("hidden"));
+  // Hide all role-specific cards first
+  document.querySelectorAll(".teacher-only, .student-only").forEach(el => el.style.display = "none");
 
-  if (currentUser.role.toLowerCase().trim() === "teacher") {
-    document.querySelectorAll(".teacher-only").forEach(el => el.classList.remove("hidden"));
+  if (currentUser.role.toLowerCase() === "teacher") {
+    document.querySelectorAll(".teacher-only").forEach(el => el.style.display = "block");
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
-  if (currentUser.role.toLowerCase().trim() === "student") {
-    document.querySelectorAll(".student-only").forEach(el => el.classList.remove("hidden"));
+  if (currentUser.role.toLowerCase() === "student") {
+    document.querySelectorAll(".student-only").forEach(el => el.style.display = "block");
     getPredictionSafe();
   }
 
@@ -89,7 +89,7 @@ function showDashboard() {
   loadAuditGraph();
 }
 
-/* ===== TEACHER: GENERATE QR ===== */
+/* ================= TEACHER: GENERATE QR ================= */
 async function generateQR() {
   qrOutput.innerHTML = "";
   const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
@@ -105,7 +105,7 @@ async function generateQR() {
       teacherID: currentUser.uid,
       qrToken: token,
       validFrom: Date.now(),
-      validTill: Date.now() + 5 * 60 * 1000, // 5 mins
+      validTill: Date.now() + 5 * 60 * 1000, // 5 minutes
       active: true
     });
     qrOutput.innerHTML += `<p>${d.data().className} → <b>${token}</b></p>`;
@@ -114,7 +114,7 @@ async function generateQR() {
   logAudit("QR_CREATED");
 }
 
-/* ===== STUDENT: SCAN QR ===== */
+/* ================= STUDENT: SCAN QR ================= */
 async function scanQR() {
   if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
 
@@ -154,7 +154,7 @@ async function scanQR() {
   });
 }
 
-/* ===== STUDENT: REQUEST CORRECTION ===== */
+/* ================= STUDENT: REQUEST CORRECTION ================= */
 async function requestCorrection(classID) {
   if (!classID) return;
   const reason = prompt("Enter reason for correction:");
@@ -176,7 +176,7 @@ async function requestCorrection(classID) {
   logAudit("CORRECTION_REQUESTED");
 }
 
-/* ===== TEACHER: LOAD / APPROVE / REJECT CORRECTIONS ===== */
+/* ================= TEACHER: LOAD / APPROVE / REJECT CORRECTIONS ================= */
 async function loadTeacherCorrections() {
   correctionRequests.innerHTML = "";
 
@@ -221,7 +221,7 @@ async function updateCorrection(id, status) {
   loadTeacherCorrections();
 }
 
-/* ===== TEACHER: EDIT CLASSES ===== */
+/* ================= TEACHER: EDIT CLASSES ================= */
 async function loadEditableClasses() {
   editClasses.innerHTML = "";
   const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
@@ -251,13 +251,13 @@ async function loadEditableClasses() {
   });
 }
 
-/* ===== STUDENT: ATTENDANCE PREDICTION ===== */
+/* ================= STUDENT: ATTENDANCE PREDICTION ================= */
 async function getPredictionSafe() {
   const doc = await db.collection("predictions").doc(currentUser.uid).get();
   predictionStatus.innerText = doc.exists ? doc.data().prediction : "No prediction data";
 }
 
-/* ===== TODAY CLASSES ===== */
+/* ================= TODAY CLASSES ================= */
 async function loadTodayClasses() {
   todaysClasses.innerHTML = "";
   const snap = await db.collection("classes").get();
@@ -273,7 +273,7 @@ async function loadTodayClasses() {
   if (!found) todaysClasses.innerHTML = "<p>No classes today</p>";
 }
 
-/* ===== AUDIT LOGS ===== */
+/* ================= AUDIT LOGS ================= */
 function logAudit(action) {
   db.collection("audit_logs").add({
     userID: currentUser.uid,
@@ -296,7 +296,7 @@ async function loadAuditLogs() {
   });
 }
 
-/* ===== AUDIT GRAPH ===== */
+/* ================= AUDIT GRAPH ================= */
 google.charts.load("current", { packages: ["corechart"] });
 async function loadAuditGraph() {
   const snap = await db.collection("audit_logs").get();
