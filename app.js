@@ -34,11 +34,7 @@ const randomToken = () => Math.random().toString(36).substring(2, 10).toUpperCas
 /* ===== LOGIN ===== */
 async function login() {
   try {
-    const cred = await auth.signInWithEmailAndPassword(
-      emailInput.value.trim(),
-      passwordInput.value
-    );
-
+    const cred = await auth.signInWithEmailAndPassword(emailInput.value.trim(), passwordInput.value);
     const snap = await db.collection("users").doc(cred.user.uid).get();
     if (!snap.exists) throw "User profile missing";
 
@@ -69,19 +65,16 @@ function showDashboard() {
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
-  document.querySelectorAll(".teacher-only,.student-only")
-    .forEach(el => el.classList.add("hidden"));
+  document.querySelectorAll(".teacher-only,.student-only").forEach(el => el.classList.add("hidden"));
 
   if (currentUser.role.toLowerCase().trim() === "teacher") {
-    document.querySelectorAll(".teacher-only")
-      .forEach(el => el.classList.remove("hidden"));
+    document.querySelectorAll(".teacher-only").forEach(el => el.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
   if (currentUser.role.toLowerCase().trim() === "student") {
-    document.querySelectorAll(".student-only")
-      .forEach(el => el.classList.remove("hidden"));
+    document.querySelectorAll(".student-only").forEach(el => el.classList.remove("hidden"));
     getPredictionSafe();
   }
 
@@ -93,19 +86,11 @@ function showDashboard() {
 /* ===== TEACHER: GENERATE QR ===== */
 async function generateQR() {
   qrOutput.innerHTML = "";
-
-  const snap = await db.collection("classes")
-    .where("teacherID", "==", currentUser.uid)
-    .get();
-
-  if (snap.empty) {
-    qrOutput.innerHTML = "<p>No classes assigned</p>";
-    return;
-  }
+  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
+  if (snap.empty) { qrOutput.innerHTML = "<p>No classes assigned</p>"; return; }
 
   for (const d of snap.docs) {
     const token = randomToken();
-
     await db.collection("qr_sessions").add({
       classID: d.id,
       teacherID: currentUser.uid,
@@ -114,7 +99,6 @@ async function generateQR() {
       validTill: Date.now() + 5 * 60 * 1000,
       active: true
     });
-
     qrOutput.innerHTML += `<p>${d.data().className} → <b>${token}</b></p>`;
   }
 
@@ -128,11 +112,7 @@ async function scanQR() {
   navigator.geolocation.getCurrentPosition(async pos => {
     const token = prompt("Enter QR token"); if (!token) return;
 
-    const snap = await db.collection("qr_sessions")
-      .where("qrToken", "==", token)
-      .where("active", "==", true)
-      .get();
-
+    const snap = await db.collection("qr_sessions").where("qrToken", "==", token).where("active", "==", true).get();
     if (snap.empty) { alert("Invalid or expired QR"); return; }
 
     const qr = snap.docs[0].data();
@@ -140,9 +120,7 @@ async function scanQR() {
 
     const geoSnap = await db.collection("geo_fences").get();
     const geo = geoSnap.docs[0].data();
-    const distance =
-      Math.abs(pos.coords.latitude - geo.latitude) +
-      Math.abs(pos.coords.longitude - geo.longitude);
+    const distance = Math.abs(pos.coords.latitude - geo.latitude) + Math.abs(pos.coords.longitude - geo.longitude);
 
     if (distance > geo.radius / 100000) { alert("Outside allowed location"); return; }
 
@@ -170,6 +148,7 @@ async function requestCorrection(classID) {
   await db.collection("corrections").add({
     studentID: currentUser.uid,
     classID: classID,
+    teacherID: (await db.collection("classes").doc(classID).get()).data().teacherID,
     reason,
     status: "pending",
     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -183,17 +162,18 @@ async function requestCorrection(classID) {
 async function loadTeacherCorrections() {
   correctionRequests.innerHTML = "";
 
-  const snap = await db.collection("corrections")
-    .where("status", "==", "pending")
-    .get();
+  const snap = await db.collection("corrections").where("status", "==", "pending").get();
+  const teacherCorrections = snap.docs.filter(d => {
+    const data = d.data();
+    return data.teacherID === currentUser.uid;
+  });
 
-  if (snap.empty) { correctionRequests.innerHTML = "<p>No pending requests</p>"; return; }
+  if (!teacherCorrections.length) { correctionRequests.innerHTML = "<p>No pending requests</p>"; return; }
 
-  snap.forEach(d => {
+  teacherCorrections.forEach(d => {
     const data = d.data();
     const div = document.createElement("div");
     div.className = "correction-request";
-
     div.innerHTML = `
       <p>
         Class: ${data.classID} <br>
@@ -201,7 +181,6 @@ async function loadTeacherCorrections() {
         Reason: ${data.reason || 'N/A'}
       </p>
     `;
-
     const approveBtn = document.createElement("button");
     approveBtn.innerText = "Approve";
     approveBtn.addEventListener("click", () => updateCorrection(d.id, "approved"));
@@ -225,11 +204,7 @@ async function updateCorrection(id, status) {
 /* ===== TEACHER: EDIT CLASSES ===== */
 async function loadEditableClasses() {
   editClasses.innerHTML = "";
-
-  const snap = await db.collection("classes")
-    .where("teacherID", "==", currentUser.uid)
-    .get();
-
+  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
   if (snap.empty) { editClasses.innerHTML = "<p>No classes found</p>"; return; }
 
   snap.forEach(d => {
@@ -288,11 +263,8 @@ function logAudit(action) {
 
 async function loadAuditLogs() {
   auditLogs.innerHTML = "";
-  const snap = await db.collection("audit_logs")
-    .where("userId", "==", currentUser.uid)
-    .orderBy("timestamp", "desc")
-    .limit(10)
-    .get();
+  const snap = await db.collection("audit_logs").where("userId", "==", currentUser.uid)
+    .orderBy("timestamp", "desc").limit(10).get();
   snap.forEach(d => { auditLogs.innerHTML += `<p>${d.data().action}</p>`; });
 }
 
@@ -304,8 +276,6 @@ async function loadAuditGraph() {
   snap.forEach(d => { map[d.data().action] = (map[d.data().action] || 0) + 1; });
   google.charts.setOnLoadCallback(() => {
     new google.visualization.PieChart(auditGraph)
-      .draw(google.visualization.arrayToDataTable(
-        [["Action", "Count"], ...Object.entries(map)]
-      ));
+      .draw(google.visualization.arrayToDataTable([["Action", "Count"], ...Object.entries(map)]));
   });
 }
