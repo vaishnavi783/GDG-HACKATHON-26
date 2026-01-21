@@ -66,16 +66,16 @@ function showDashboard() {
   quoteText.innerText = "Consistency beats motivation.";
 
   // Hide all role-specific cards initially
-  document.querySelectorAll(".teacher-only,.student-only").forEach(el => el.style.display = "none");
+  document.querySelectorAll(".teacher-only, .student-only").forEach(el => el.classList.add("hidden"));
 
   if (currentUser.role.toLowerCase().trim() === "teacher") {
-    document.querySelectorAll(".teacher-only").forEach(el => el.style.display = "block");
+    document.querySelectorAll(".teacher-only").forEach(el => el.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
   if (currentUser.role.toLowerCase().trim() === "student") {
-    document.querySelectorAll(".student-only").forEach(el => el.style.display = "block");
+    document.querySelectorAll(".student-only").forEach(el => el.classList.remove("hidden"));
     getPredictionSafe();
   }
 
@@ -88,7 +88,10 @@ function showDashboard() {
 async function generateQR() {
   qrOutput.innerHTML = "";
   const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
-  if (snap.empty) { qrOutput.innerHTML = "<p>No classes assigned</p>"; return; }
+  if (snap.empty) {
+    qrOutput.innerHTML = "<p>No classes assigned</p>";
+    return;
+  }
 
   for (const d of snap.docs) {
     const token = randomToken();
@@ -97,7 +100,7 @@ async function generateQR() {
       teacherID: currentUser.uid,
       qrToken: token,
       validFrom: Date.now(),
-      validTill: Date.now() + 5 * 60 * 1000,
+      validTill: Date.now() + 5 * 60 * 1000, // 5 mins
       active: true
     });
     qrOutput.innerHTML += `<p>${d.data().className} → <b>${token}</b></p>`;
@@ -111,7 +114,8 @@ async function scanQR() {
   if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
 
   navigator.geolocation.getCurrentPosition(async pos => {
-    const token = prompt("Enter QR token"); if (!token) return;
+    const token = prompt("Enter QR token");
+    if (!token) return;
 
     const snap = await db.collection("qr_sessions").where("qrToken", "==", token).where("active", "==", true).get();
     if (snap.empty) { alert("Invalid or expired QR"); return; }
@@ -120,9 +124,10 @@ async function scanQR() {
     if (qr.validTill < Date.now()) { alert("QR expired"); return; }
 
     const geoSnap = await db.collection("geo_fences").get();
+    if (geoSnap.empty) { alert("No geo-fence defined"); return; }
     const geo = geoSnap.docs[0].data();
-    const distance = Math.abs(pos.coords.latitude - geo.latitude) + Math.abs(pos.coords.longitude - geo.longitude);
 
+    const distance = Math.abs(pos.coords.latitude - geo.latitude) + Math.abs(pos.coords.longitude - geo.longitude);
     if (distance > geo.radius / 100000) { alert("Outside allowed location"); return; }
 
     await db.collection("attendance").add({
@@ -143,7 +148,7 @@ async function scanQR() {
 /* ===== STUDENT: REQUEST CORRECTION ===== */
 async function requestCorrection(classID) {
   if (!classID) return;
-  const reason = prompt("Enter reason for correction:"); 
+  const reason = prompt("Enter reason for correction:");
   if (!reason) return alert("Correction reason is required");
 
   const classSnap = await db.collection("classes").doc(classID).get();
@@ -151,7 +156,7 @@ async function requestCorrection(classID) {
 
   await db.collection("corrections").add({
     studentID: currentUser.uid,
-    classID: classID,
+    classID,
     teacherID: classSnap.data().teacherID,
     reason,
     status: "pending",
@@ -169,7 +174,10 @@ async function loadTeacherCorrections() {
   const snap = await db.collection("corrections").where("status", "==", "pending").get();
   const teacherCorrections = snap.docs.filter(d => d.data().teacherID === currentUser.uid);
 
-  if (!teacherCorrections.length) { correctionRequests.innerHTML = "<p>No pending requests</p>"; return; }
+  if (!teacherCorrections.length) {
+    correctionRequests.innerHTML = "<p>No pending requests</p>";
+    return;
+  }
 
   teacherCorrections.forEach(d => {
     const data = d.data();
@@ -216,7 +224,6 @@ async function loadEditableClasses() {
 
     const input = document.createElement("input");
     input.value = d.data().className;
-    input.id = `class-${d.id}`;
 
     const btn = document.createElement("button");
     btn.innerText = "Update";
@@ -282,11 +289,17 @@ google.charts.load("current", { packages: ["corechart"] });
 async function loadAuditGraph() {
   const snap = await db.collection("audit_logs").get();
   const map = {};
-  snap.forEach(d => { map[d.data().action] = (map[d.data().action] || 0) + 1; });
+  snap.forEach(d => {
+    const action = d.data().action;
+    map[action] = (map[action] || 0) + 1;
+  });
 
   google.charts.setOnLoadCallback(() => {
-    new google.visualization.PieChart(auditGraph).draw(
-      google.visualization.arrayToDataTable([["Action", "Count"], ...Object.entries(map)])
-    );
+    const data = google.visualization.arrayToDataTable([
+      ["Action", "Count"],
+      ...Object.entries(map)
+    ]);
+    const chart = new google.visualization.PieChart(auditGraph);
+    chart.draw(data, { height: 300 });
   });
 }
