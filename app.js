@@ -42,10 +42,11 @@ async function login() {
     const snap = await db.collection("users").doc(cred.user.uid).get();
     if (!snap.exists) throw "User profile missing";
 
-    if (snap.data().role.toLowerCase() !== roleSelect.value.toLowerCase())
+    currentUser = { uid: cred.user.uid, ...snap.data() };
+    
+    if (currentUser.role.toLowerCase().trim() !== roleSelect.value.toLowerCase())
       throw "Role mismatch";
 
-    currentUser = { uid: cred.user.uid, ...snap.data() };
     logAudit("LOGIN");
     showDashboard();
   } catch (e) {
@@ -71,14 +72,14 @@ function showDashboard() {
   document.querySelectorAll(".teacher-only,.student-only")
     .forEach(el => el.classList.add("hidden"));
 
-  if (currentUser.role === "teacher") {
+  if (currentUser.role.toLowerCase().trim() === "teacher") {
     document.querySelectorAll(".teacher-only")
       .forEach(el => el.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
-  if (currentUser.role === "student") {
+  if (currentUser.role.toLowerCase().trim() === "student") {
     document.querySelectorAll(".student-only")
       .forEach(el => el.classList.remove("hidden"));
     getPredictionSafe();
@@ -120,44 +121,30 @@ async function generateQR() {
   logAudit("QR_CREATED");
 }
 
-/* ===== STUDENT: SCAN QR WITH GEO-FENCING ===== */
+/* ===== STUDENT: SCAN QR ===== */
 async function scanQR() {
-  if (!navigator.geolocation) {
-    alert("Geolocation not supported");
-    return;
-  }
+  if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
 
   navigator.geolocation.getCurrentPosition(async pos => {
-    const token = prompt("Enter QR token");
-    if (!token) return;
+    const token = prompt("Enter QR token"); if (!token) return;
 
     const snap = await db.collection("qr_sessions")
       .where("qrToken", "==", token)
       .where("active", "==", true)
       .get();
 
-    if (snap.empty) {
-      alert("Invalid or expired QR");
-      return;
-    }
+    if (snap.empty) { alert("Invalid or expired QR"); return; }
 
     const qr = snap.docs[0].data();
-    if (qr.validTill < Date.now()) {
-      alert("QR expired");
-      return;
-    }
+    if (qr.validTill < Date.now()) { alert("QR expired"); return; }
 
-    // Geo-fencing (100m approx)
     const geoSnap = await db.collection("geo_fences").get();
     const geo = geoSnap.docs[0].data();
     const distance =
       Math.abs(pos.coords.latitude - geo.latitude) +
       Math.abs(pos.coords.longitude - geo.longitude);
 
-    if (distance > geo.radius / 100000) { // approximate check
-      alert("Outside allowed location");
-      return;
-    }
+    if (distance > geo.radius / 100000) { alert("Outside allowed location"); return; }
 
     await db.collection("attendance").add({
       studentUid: currentUser.uid,
@@ -177,8 +164,7 @@ async function scanQR() {
 /* ===== STUDENT: REQUEST CORRECTION ===== */
 async function requestCorrection(classID) {
   if (!classID) return;
-
-  const reason = prompt("Enter reason for correction:");
+  const reason = prompt("Enter reason for correction:"); 
   if (!reason) return alert("Correction reason is required");
 
   await db.collection("corrections").add({
@@ -201,24 +187,32 @@ async function loadTeacherCorrections() {
     .where("status", "==", "pending")
     .get();
 
-  if (snap.empty) {
-    correctionRequests.innerHTML = "<p>No pending requests</p>";
-    return;
-  }
+  if (snap.empty) { correctionRequests.innerHTML = "<p>No pending requests</p>"; return; }
 
   snap.forEach(d => {
     const data = d.data();
-    correctionRequests.innerHTML += `
-      <div class="correction-request">
-        <p>
-          Class: ${data.classId} <br>
-          Student: ${data.studentId} <br>
-          Reason: ${data.reason || 'N/A'}
-        </p>
-        <button onclick="updateCorrection('${d.id}', 'approved')">Approve</button>
-        <button onclick="updateCorrection('${d.id}', 'rejected')">Reject</button>
-      </div>
+    const div = document.createElement("div");
+    div.className = "correction-request";
+
+    div.innerHTML = `
+      <p>
+        Class: ${data.classId} <br>
+        Student: ${data.studentId} <br>
+        Reason: ${data.reason || 'N/A'}
+      </p>
     `;
+
+    const approveBtn = document.createElement("button");
+    approveBtn.innerText = "Approve";
+    approveBtn.addEventListener("click", () => updateCorrection(d.id, "approved"));
+
+    const rejectBtn = document.createElement("button");
+    rejectBtn.innerText = "Reject";
+    rejectBtn.addEventListener("click", () => updateCorrection(d.id, "rejected"));
+
+    div.appendChild(approveBtn);
+    div.appendChild(rejectBtn);
+    correctionRequests.appendChild(div);
   });
 }
 
@@ -236,41 +230,36 @@ async function loadEditableClasses() {
     .where("teacherID", "==", currentUser.uid)
     .get();
 
-  if (snap.empty) {
-    editClasses.innerHTML = "<p>No classes found</p>";
-    return;
-  }
+  if (snap.empty) { editClasses.innerHTML = "<p>No classes found</p>"; return; }
 
   snap.forEach(d => {
-    editClasses.innerHTML += `
-      <div class="class-edit">
-        <input id="class-${d.id}" value="${d.data().className}">
-        <button onclick="updateClassName('${d.id}')">Update</button>
-      </div>
-    `;
+    const div = document.createElement("div");
+    div.className = "class-edit";
+
+    const input = document.createElement("input");
+    input.value = d.data().className;
+    input.id = `class-${d.id}`;
+
+    const btn = document.createElement("button");
+    btn.innerText = "Update";
+    btn.addEventListener("click", async () => {
+      const newName = input.value.trim();
+      if (!newName) return alert("Class name cannot be empty");
+      await db.collection("classes").doc(d.id).update({ className: newName });
+      alert("Class updated ✅");
+      logAudit("CLASS_UPDATED");
+    });
+
+    div.appendChild(input);
+    div.appendChild(btn);
+    editClasses.appendChild(div);
   });
-}
-
-async function updateClassName(id) {
-  const input = document.getElementById("class-" + id);
-  if (!input.value.trim()) return alert("Class name cannot be empty");
-
-  await db.collection("classes").doc(id).update({
-    className: input.value.trim()
-  });
-
-  alert("Class updated ✅");
-  logAudit("CLASS_UPDATED");
 }
 
 /* ===== PREDICTION ===== */
 async function getPredictionSafe() {
-  const doc = await db.collection("predictions")
-    .doc(currentUser.uid)
-    .get();
-
-  predictionStatus.innerText =
-    doc.exists ? doc.data().prediction : "No prediction data";
+  const doc = await db.collection("predictions").doc(currentUser.uid).get();
+  predictionStatus.innerText = doc.exists ? doc.data().prediction : "No prediction data";
 }
 
 /* ===== TODAY CLASSES ===== */
@@ -278,14 +267,12 @@ async function loadTodayClasses() {
   todaysClasses.innerHTML = "";
   const snap = await db.collection("classes").get();
   let found = false;
-
   snap.forEach(d => {
     if ((d.data().days || []).includes(todayName())) {
       found = true;
       todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
     }
   });
-
   if (!found) todaysClasses.innerHTML = "<p>No classes today</p>";
 }
 
@@ -301,16 +288,12 @@ function logAudit(action) {
 
 async function loadAuditLogs() {
   auditLogs.innerHTML = "";
-
   const snap = await db.collection("audit_logs")
     .where("userId", "==", currentUser.uid)
     .orderBy("timestamp", "desc")
     .limit(10)
     .get();
-
-  snap.forEach(d => {
-    auditLogs.innerHTML += `<p>${d.data().action}</p>`;
-  });
+  snap.forEach(d => { auditLogs.innerHTML += `<p>${d.data().action}</p>`; });
 }
 
 /* ===== GRAPH ===== */
@@ -318,11 +301,7 @@ google.charts.load("current", { packages: ["corechart"] });
 async function loadAuditGraph() {
   const snap = await db.collection("audit_logs").get();
   const map = {};
-
-  snap.forEach(d => {
-    map[d.data().action] = (map[d.data().action] || 0) + 1;
-  });
-
+  snap.forEach(d => { map[d.data().action] = (map[d.data().action] || 0) + 1; });
   google.charts.setOnLoadCallback(() => {
     new google.visualization.PieChart(auditGraph)
       .draw(google.visualization.arrayToDataTable(
