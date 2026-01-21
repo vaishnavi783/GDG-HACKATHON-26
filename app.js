@@ -176,7 +176,7 @@ async function requestCorrection(classID) {
   logAudit("CORRECTION_REQUESTED");
 }
 
-/* ===== TEACHER: VIEW / APPROVE / REJECT CORRECTIONS ===== */
+/* ===== TEACHER: LOAD / APPROVE / REJECT CORRECTIONS ===== */
 async function loadTeacherCorrections() {
   correctionRequests.innerHTML = "";
 
