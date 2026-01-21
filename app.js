@@ -125,9 +125,10 @@ async function requestCorrection() {
   let classNameInput = document.getElementById("correction-class-id").value.trim();
   if (!classNameInput) return alert("Enter Class Name");
 
+  // Normalize for case-insensitive search
   const classNameLower = classNameInput.toLowerCase();
 
-  // Query all classes and find match (case-insensitive)
+  // Query all classes and find the first match
   const snap = await db.collection("classes").get();
   const clsDoc = snap.docs.find(d => (d.data().className || "").toLowerCase() === classNameLower);
 
