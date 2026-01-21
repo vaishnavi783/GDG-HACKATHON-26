@@ -1,136 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Smart Attend+</title>
+  <meta charset="UTF-8">
+  <title>AttendX</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+  <!-- ✅ LINK EXTERNAL CSS -->
+  <link rel="stylesheet" href="style.css">
 
-<script src="https://www.gstatic.com/charts/loader.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <!-- ✅ Firebase (Required BEFORE app.js) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- Google Charts -->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
 </head>
 
 <body>
 
-<!-- LOGIN PAGE -->
+<!-- ========== LOGIN PAGE ========== -->
 <div id="login-page">
-  <div class="card login-card">
-    <h2>Smart Attend+</h2>
-    <p class="sub">Fair • Transparent • Stress-Free</p>
+  <h2>Login</h2>
 
-    <input id="email" type="email" placeholder="College Email" required>
-    <input id="password" type="password" placeholder="Password" required>
+  <input id="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
 
-    <select id="role">
-      <option value="student">Student</option>
-      <option value="teacher">Teacher</option>
-    </select>
+  <select id="role">
+    <option value="teacher">Teacher</option>
+    <option value="student">Student</option>
+  </select>
 
-    <button onclick="login()">Login</button>
-    <p id="login-error" class="error-msg hidden"></p>
-  </div>
+  <button onclick="login()">Login</button>
+  <p id="login-error"></p>
 </div>
 
-<!-- DASHBOARD -->
+<!-- ========== DASHBOARD ========== -->
 <div id="dashboard" class="hidden">
-  <header>
-    🌸 Smart Attendance & Wellness Portal
-    <button onclick="logout()">Logout</button>
-  </header>
 
-  <div class="user-info">
-    <div>
-      <span id="user-email"></span> | <span id="user-role"></span>
-    </div>
-    <div>
-      <span id="quoteText"></span>
-    </div>
-  </div>
+  <h2>Dashboard</h2>
+  <p>Email: <span id="user-email"></span></p>
+  <p>Role: <span id="user-role"></span></p>
+  <p id="quoteText"></p>
 
-  <div class="dashboard-grid">
+  <button onclick="logout()">Logout</button>
 
-    <!-- TEACHER: Generate QR -->
-    <div class="card teacher-only hidden">
-      <h3>📷 Generate QR</h3>
+  <!-- ========== TEACHER SECTION ========== -->
+  <div class="teacher-only hidden">
+
+    <div class="tab">
+      <h3>Generate QR</h3>
       <button onclick="generateQR()">Generate QR</button>
       <div id="qr-output"></div>
     </div>
 
-    <!-- STUDENT: Scan QR -->
-    <div class="card student-only hidden">
-      <h3>📷 Scan QR & Mark Attendance</h3>
+    <div class="tab">
+      <h3>Edit Classes</h3>
+      <div id="edit-classes"></div>
+    </div>
+
+    <div class="tab">
+      <h3>Correction Requests</h3>
+      <div id="correction-requests">
+        <!-- JS will populate: className + reason + Approve/Reject buttons -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========== STUDENT SECTION ========== -->
+  <div class="student-only hidden">
+
+    <div class="tab">
+      <h3>Scan QR</h3>
       <button onclick="scanQR()">Scan QR</button>
       <p id="attendance-status"></p>
     </div>
 
-    <!-- STUDENT: Attendance Prediction -->
-    <div class="card student-only hidden">
-      <h3>📊 Attendance Prediction</h3>
-      <button onclick="getPredictionSafe()">Predict Attendance Risk</button>
+    <div class="tab">
+      <h3>Attendance Prediction</h3>
+      <button onclick="getPredictionSafe()">Check Prediction</button>
       <p id="prediction-status"></p>
     </div>
 
-    <!-- STUDENT: Request Correction -->
-    <div class="card student-only hidden">
-      <h3>🔐 Request Correction</h3>
-      <button onclick="requestCorrection(prompt('Enter Class ID'))">
-        Request Correction
-      </button>
-      <p id="correction-status"></p>
-    </div>
-
-    <!-- TEACHER: View & Approve Corrections -->
-    <div class="card teacher-only hidden">
-      <h3>✅ Pending Corrections</h3>
-      <div id="correction-requests"></div>
-    </div>
-
-    <!-- TEACHER: Edit Classes -->
-    <div class="card teacher-only hidden">
-      <h3>📝 Edit Today's Classes</h3>
-      <div id="edit-classes"></div>
-    </div>
-
-    <!-- TODAY'S CLASSES -->
-    <div class="card">
-      <h3>🎯 Today's Classes</h3>
-      <div id="todays-classes"><p>No classes scheduled for today</p></div>
-    </div>
-
-    <!-- AUDIT LOGS -->
-    <div class="card">
-      <h3>🧾 Audit Logs</h3>
-      <div id="audit-logs"></div>
-    </div>
-
-    <!-- AUDIT GRAPH -->
-    <div class="card">
-      <h3>📈 Audit Graph</h3>
-      <div id="auditGraph" style="height:300px;"></div>
+    <div class="tab">
+      <h3>Request Correction</h3>
+      <button onclick="requestCorrectionWithReason()">Request Correction</button>
     </div>
 
   </div>
+
+  <!-- ========== COMMON SECTION ========== -->
+  <div class="tab">
+    <h3>Today's Classes</h3>
+    <div id="todays-classes"></div>
+  </div>
+
+  <div class="tab">
+    <h3>Audit Logs</h3>
+    <div id="audit-logs"></div>
+  </div>
+
+  <div class="tab">
+    <h3>Audit Graph</h3>
+    <div id="auditGraph" style="width:300px;height:300px;"></div>
+  </div>
+
 </div>
 
-<!-- FIREBASE CONFIG -->
+<!-- ✅ FIREBASE CONFIG -->
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
-  authDomain: "attendx-6be15.firebaseapp.com",
-  projectId: "attendx-6be15",
-  storageBucket: "attendx-6be15.appspot.com",
-  messagingSenderId: "593387890331",
-  appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  // ===== STUDENT REQUEST CORRECTION WITH REASON =====
+  function requestCorrectionWithReason() {
+    const classID = prompt("Enter Class ID");
+    if (!classID) return;
+    const reason = prompt("Enter reason for correction");
+    if (!reason) return;
+
+    db.collection("corrections").add({
+      studentId: auth.currentUser.uid,
+      classId: classID,
+      reason,
+      status: "pending",
+      requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(() => alert("Correction requested ✅"));
+  }
 </script>
 
+<!-- ✅ LINK APP.JS (ALWAYS LAST) -->
 <script src="app.js"></script>
+
 </body>
 </html>
