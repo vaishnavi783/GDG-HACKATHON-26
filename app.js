@@ -65,16 +65,17 @@ function showDashboard() {
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
-  document.querySelectorAll(".teacher-only,.student-only").forEach(el => el.classList.add("hidden"));
+  // Hide all role-specific cards initially
+  document.querySelectorAll(".teacher-only,.student-only").forEach(el => el.style.display = "none");
 
   if (currentUser.role.toLowerCase().trim() === "teacher") {
-    document.querySelectorAll(".teacher-only").forEach(el => el.classList.remove("hidden"));
+    document.querySelectorAll(".teacher-only").forEach(el => el.style.display = "block");
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
   if (currentUser.role.toLowerCase().trim() === "student") {
-    document.querySelectorAll(".student-only").forEach(el => el.classList.remove("hidden"));
+    document.querySelectorAll(".student-only").forEach(el => el.style.display = "block");
     getPredictionSafe();
   }
 
@@ -145,10 +146,13 @@ async function requestCorrection(classID) {
   const reason = prompt("Enter reason for correction:"); 
   if (!reason) return alert("Correction reason is required");
 
+  const classSnap = await db.collection("classes").doc(classID).get();
+  if (!classSnap.exists) return alert("Class not found");
+
   await db.collection("corrections").add({
     studentID: currentUser.uid,
     classID: classID,
-    teacherID: (await db.collection("classes").doc(classID).get()).data().teacherID,
+    teacherID: classSnap.data().teacherID,
     reason,
     status: "pending",
     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -163,10 +167,7 @@ async function loadTeacherCorrections() {
   correctionRequests.innerHTML = "";
 
   const snap = await db.collection("corrections").where("status", "==", "pending").get();
-  const teacherCorrections = snap.docs.filter(d => {
-    const data = d.data();
-    return data.teacherID === currentUser.uid;
-  });
+  const teacherCorrections = snap.docs.filter(d => d.data().teacherID === currentUser.uid);
 
   if (!teacherCorrections.length) { correctionRequests.innerHTML = "<p>No pending requests</p>"; return; }
 
@@ -174,6 +175,7 @@ async function loadTeacherCorrections() {
     const data = d.data();
     const div = document.createElement("div");
     div.className = "correction-request";
+
     div.innerHTML = `
       <p>
         Class: ${data.classID} <br>
@@ -181,6 +183,7 @@ async function loadTeacherCorrections() {
         Reason: ${data.reason || 'N/A'}
       </p>
     `;
+
     const approveBtn = document.createElement("button");
     approveBtn.innerText = "Approve";
     approveBtn.addEventListener("click", () => updateCorrection(d.id, "approved"));
@@ -231,7 +234,7 @@ async function loadEditableClasses() {
   });
 }
 
-/* ===== PREDICTION ===== */
+/* ===== STUDENT: ATTENDANCE PREDICTION ===== */
 async function getPredictionSafe() {
   const doc = await db.collection("predictions").doc(currentUser.uid).get();
   predictionStatus.innerText = doc.exists ? doc.data().prediction : "No prediction data";
@@ -251,10 +254,10 @@ async function loadTodayClasses() {
   if (!found) todaysClasses.innerHTML = "<p>No classes today</p>";
 }
 
-/* ===== AUDIT ===== */
+/* ===== AUDIT LOGS ===== */
 function logAudit(action) {
   db.collection("audit_logs").add({
-    userId: currentUser.uid,
+    userID: currentUser.uid,
     role: currentUser.role,
     action,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -263,19 +266,27 @@ function logAudit(action) {
 
 async function loadAuditLogs() {
   auditLogs.innerHTML = "";
-  const snap = await db.collection("audit_logs").where("userId", "==", currentUser.uid)
-    .orderBy("timestamp", "desc").limit(10).get();
-  snap.forEach(d => { auditLogs.innerHTML += `<p>${d.data().action}</p>`; });
+  const snap = await db.collection("audit_logs")
+    .where("userID", "==", currentUser.uid)
+    .orderBy("timestamp", "desc")
+    .limit(10)
+    .get();
+
+  snap.forEach(d => {
+    auditLogs.innerHTML += `<p>${d.data().action}</p>`;
+  });
 }
 
-/* ===== GRAPH ===== */
+/* ===== AUDIT GRAPH ===== */
 google.charts.load("current", { packages: ["corechart"] });
 async function loadAuditGraph() {
   const snap = await db.collection("audit_logs").get();
   const map = {};
   snap.forEach(d => { map[d.data().action] = (map[d.data().action] || 0) + 1; });
+
   google.charts.setOnLoadCallback(() => {
-    new google.visualization.PieChart(auditGraph)
-      .draw(google.visualization.arrayToDataTable([["Action", "Count"], ...Object.entries(map)]));
+    new google.visualization.PieChart(auditGraph).draw(
+      google.visualization.arrayToDataTable([["Action", "Count"], ...Object.entries(map)])
+    );
   });
 }
