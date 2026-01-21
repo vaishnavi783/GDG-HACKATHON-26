@@ -78,7 +78,7 @@ async function generateQR() {
       teacherID: currentUser.uid,
       qrToken: token,
       active: true,
-      validTill: Date.now() + 5 * 60 * 1000 // 5 minutes
+      validTill: Date.now() + 5 * 60 * 1000
     });
 
     out.innerHTML += `<p>${doc.data().className} → <b>${token}</b></p>`;
@@ -171,11 +171,11 @@ async function loadTeacherCorrections() {
 
     const approveBtn = document.createElement("button");
     approveBtn.innerText = "Approve";
-    approveBtn.onclick = () => updateCorrection(doc.id, data, "approved");
+    approveBtn.onclick = async () => await updateCorrection(doc.id, data, "approved");
 
     const rejectBtn = document.createElement("button");
     rejectBtn.innerText = "Reject";
-    rejectBtn.onclick = () => updateCorrection(doc.id, data, "rejected");
+    rejectBtn.onclick = async () => await updateCorrection(doc.id, data, "rejected");
 
     div.append(approveBtn, rejectBtn);
     box.appendChild(div);
