@@ -27,7 +27,7 @@ async function login() {
 
     toggleRoleUI();
 
-    // Load data (safe for empty collections)
+    // Load data
     loadTodayClasses();
     loadAuditLogs();
     loadAuditGraph();
@@ -122,22 +122,29 @@ async function scanQR() {
 
 /* ================= STUDENT: REQUEST CORRECTION ================= */
 async function requestCorrection() {
-  const classID = document.getElementById("correction-class-id").value.trim();
-  if (!classID) return alert("Enter Class ID");
+  const className = document.getElementById("correction-class-id").value.trim();
+  if (!className) return alert("Enter Class Name");
 
-  const cls = await db.collection("classes").doc(classID).get();
-  if (!cls.exists) {
-    document.getElementById("correction-status").innerText = "Invalid Class ID";
+  // Query class by name
+  const clsSnap = await db.collection("classes")
+    .where("className", "==", className)
+    .get();
+
+  if (clsSnap.empty) {
+    document.getElementById("correction-status").innerText = "Invalid Class Name";
     return;
   }
+
+  const clsDoc = clsSnap.docs[0];
+  const clsData = clsDoc.data();
 
   const reason = prompt("Enter reason for correction");
   if (!reason) return;
 
   await db.collection("corrections").add({
-    classID,
+    classID: clsDoc.id,
     studentID: currentUser.uid,
-    teacherID: cls.data().teacherID,
+    teacherID: clsData.teacherID,
     reason,
     status: "pending",
     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -200,7 +207,7 @@ async function updateCorrection(id, data, status) {
   }
 
   logAudit(`CORRECTION_${status.toUpperCase()}`);
-  loadTeacherCorrections(); // refresh
+  loadTeacherCorrections();
 }
 
 /* ================= TEACHER: EDIT CLASSES ================= */
@@ -259,6 +266,7 @@ async function getPredictionSafe() {
 
   document.getElementById("prediction-status").innerText =
     snap.size >= 5 ? "Good attendance 👍" : "Attendance at risk ⚠️";
+
   logAudit("PREDICTION_VIEWED");
 }
 
