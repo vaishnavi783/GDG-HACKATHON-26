@@ -122,13 +122,11 @@ async function scanQR() {
 
 /* ================= STUDENT: REQUEST CORRECTION ================= */
 async function requestCorrection() {
-  let classNameInput = document.getElementById("correction-class-id").value.trim();
+  const classNameInput = document.getElementById("correction-class-id").value.trim();
   if (!classNameInput) return alert("Enter Class Name");
 
-  // Normalize for case-insensitive search
   const classNameLower = classNameInput.toLowerCase();
 
-  // Query all classes and find the first match
   const snap = await db.collection("classes").get();
   const clsDoc = snap.docs.find(d => (d.data().className || "").toLowerCase() === classNameLower);
 
@@ -192,6 +190,7 @@ async function loadTeacherCorrections() {
   });
 }
 
+/* ================= UPDATE CORRECTION ================= */
 async function updateCorrection(id, data, status) {
   await db.collection("corrections").doc(id).update({ status });
 
@@ -203,6 +202,10 @@ async function updateCorrection(id, data, status) {
       status: "present",
       corrected: true
     });
+
+    alert(`Correction approved ✅ Attendance updated for Class ID: ${data.classID}`);
+  } else if (status === "rejected") {
+    alert(`Correction rejected ❌ for Class ID: ${data.classID}`);
   }
 
   logAudit(`CORRECTION_${status.toUpperCase()}`);
@@ -232,6 +235,7 @@ async function loadEditableClasses() {
     btn.onclick = async () => {
       await doc.ref.update({ className: input.value });
       logAudit("CLASS_UPDATED");
+      alert(`Class updated successfully to "${input.value}" ✅`);
     };
 
     box.append(input, btn);
