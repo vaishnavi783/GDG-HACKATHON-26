@@ -1,3 +1,9 @@
+/* ================= ROLE-SPECIFIC CARDS ================= */
+.teacher-only, .student-only {
+  display: none; /* hidden initially */
+}
+
+/* ================= GLOBAL STYLES ================= */
 * {
   margin: 0;
   padding: 0;
