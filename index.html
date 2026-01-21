@@ -56,19 +56,23 @@
     <div class="card teacher-only hidden">
       <h3>📷 Generate QR</h3>
       <button onclick="generateQR()">Generate QR</button>
-      <div id="qr-output"></div>
+      <div id="qr-output"><p>No QR generated yet</p></div>
     </div>
 
     <!-- TEACHER: Edit Classes -->
     <div class="card teacher-only hidden">
       <h3>📝 Edit Classes</h3>
-      <div id="edit-classes"></div>
+      <div id="edit-classes">
+        <p>No classes available. Add classes in Firebase.</p>
+      </div>
     </div>
 
     <!-- TEACHER: View / Approve Corrections -->
     <div class="card teacher-only hidden">
       <h3>✅ Pending Correction Requests</h3>
-      <div id="correction-requests"></div>
+      <div id="correction-requests">
+        <p>No pending requests</p>
+      </div>
     </div>
 
     <!-- STUDENT: Scan QR -->
@@ -97,13 +101,13 @@
     <!-- COMMON: Today's Classes -->
     <div class="card">
       <h3>🎯 Today's Classes</h3>
-      <div id="todays-classes"></div>
+      <div id="todays-classes"><p>No classes scheduled for today</p></div>
     </div>
 
     <!-- COMMON: Audit Logs -->
     <div class="card">
       <h3>🧾 Audit Logs</h3>
-      <div id="audit-logs"></div>
+      <div id="audit-logs"><p>No recent actions</p></div>
     </div>
 
     <!-- COMMON: Audit Graph -->
