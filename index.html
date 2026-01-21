@@ -18,11 +18,11 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 </head>
+
 <body>
 
-<!-- LOGIN PAGE -->
+<!-- ================= LOGIN PAGE ================= -->
 <div id="login-page">
   <div class="card login-card">
     <h2>Smart Attend+</h2>
@@ -41,38 +41,40 @@
   </div>
 </div>
 
-<!-- DASHBOARD -->
+<!-- ================= DASHBOARD ================= -->
 <div id="dashboard" class="hidden">
+
   <header>
     🌸 Smart Attendance & Wellness Portal
     <button onclick="logout()">Logout</button>
   </header>
 
   <div class="user-info">
-    <span id="user-email"></span> | <span id="user-role"></span>
+    <span id="user-email"></span> |
+    <span id="user-role"></span>
     <p id="quoteText"></p>
   </div>
 
   <div class="dashboard-grid">
 
-    <!-- TEACHER CARDS -->
+    <!-- ===== TEACHER SECTION ===== -->
     <div class="card teacher-only hidden">
       <h3>📷 Generate QR</h3>
       <button onclick="generateQR()">Generate QR</button>
-      <div id="qr-output"><p>No QR generated yet</p></div>
+      <div id="qr-output">No QR generated</div>
     </div>
 
     <div class="card teacher-only hidden">
-      <h3>📝 Edit Classes</h3>
-      <div id="edit-classes"><p>No classes found</p></div>
+      <h3>📝 Edit Today's Classes</h3>
+      <div id="edit-classes">No classes available</div>
     </div>
 
     <div class="card teacher-only hidden">
       <h3>✅ Pending Correction Requests</h3>
-      <div id="correction-requests"><p>No pending requests</p></div>
+      <div id="correction-requests">No pending requests</div>
     </div>
 
-    <!-- STUDENT CARDS -->
+    <!-- ===== STUDENT SECTION ===== -->
     <div class="card student-only hidden">
       <h3>📷 Scan QR & Mark Attendance</h3>
       <button onclick="scanQR()">Scan QR</button>
@@ -80,8 +82,9 @@
     </div>
 
     <div class="card student-only hidden">
-      <h3>🔐 Request Correction</h3>
-      <button onclick="requestCorrection(prompt('Enter Class ID'))">Request Correction</button>
+      <h3>✏️ Request Attendance Correction</h3>
+      <input id="correction-class-id" placeholder="Enter Class ID">
+      <button onclick="requestCorrection()">Submit Request</button>
       <p id="correction-status"></p>
     </div>
 
@@ -91,15 +94,15 @@
       <p id="prediction-status"></p>
     </div>
 
-    <!-- COMMON CARDS -->
+    <!-- ===== COMMON SECTION ===== -->
     <div class="card">
       <h3>🎯 Today's Classes</h3>
-      <div id="todays-classes"><p>No classes scheduled for today</p></div>
+      <div id="todays-classes">No classes scheduled</div>
     </div>
 
     <div class="card">
       <h3>🧾 Audit Logs</h3>
-      <div id="audit-logs"><p>No recent actions</p></div>
+      <div id="audit-logs">No recent activity</div>
     </div>
 
     <div class="card">
@@ -110,7 +113,7 @@
   </div>
 </div>
 
-<!-- FIREBASE CONFIG -->
+<!-- ================= FIREBASE CONFIG ================= -->
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
@@ -120,11 +123,14 @@ const firebaseConfig = {
   messagingSenderId: "593387890331",
   appId: "1:593387890331:web:f11e81a9ac30f23dbc083e"
 };
+
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 </script>
 
+<!-- APP LOGIC -->
 <script src="app.js"></script>
+
 </body>
 </html>
