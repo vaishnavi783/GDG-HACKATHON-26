@@ -17,11 +17,13 @@ async function login() {
 
     if (currentUser.role !== selectedRole) throw "Role mismatch";
 
+    // Show dashboard
     document.getElementById("login-page").classList.add("hidden");
     document.getElementById("dashboard").classList.remove("hidden");
 
     document.getElementById("user-email").innerText = currentUser.email;
     document.getElementById("user-role").innerText = currentUser.role;
+    document.getElementById("quoteText").innerText = "Consistency beats motivation.";
 
     toggleRoleUI();
     loadTodayClasses();
@@ -43,7 +45,7 @@ function logout() {
   location.reload();
 }
 
-/* ================= ROLE UI ================= */
+/* ================= ROLE-BASED UI ================= */
 function toggleRoleUI() {
   document.querySelectorAll(".teacher-only").forEach(el =>
     el.style.display = currentUser.role === "teacher" ? "block" : "none"
@@ -55,10 +57,7 @@ function toggleRoleUI() {
 
 /* ================= TEACHER: GENERATE QR ================= */
 async function generateQR() {
-  const snap = await db.collection("classes")
-    .where("teacherID", "==", currentUser.uid)
-    .get();
-
+  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
   const out = document.getElementById("qr-output");
   out.innerHTML = "";
 
@@ -67,18 +66,22 @@ async function generateQR() {
     return;
   }
 
-  for (const d of snap.docs) {
+  for (const doc of snap.docs) {
+    // Deactivate old QRs
+    const oldQRs = await db.collection("qr_sessions").where("classID", "==", doc.id).get();
+    oldQRs.forEach(q => q.ref.update({ active: false }));
+
     const token = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     await db.collection("qr_sessions").add({
-      classID: d.id,
+      classID: doc.id,
       teacherID: currentUser.uid,
       qrToken: token,
       active: true,
-      validTill: Date.now() + 5 * 60 * 1000
+      validTill: Date.now() + 5 * 60 * 1000 // 5 minutes
     });
 
-    out.innerHTML += `<p>${d.data().className} → <b>${token}</b></p>`;
+    out.innerHTML += `<p>${doc.data().className} → <b>${token}</b></p>`;
   }
 
   logAudit("QR_GENERATED");
@@ -105,7 +108,8 @@ async function scanQR() {
     studentID: currentUser.uid,
     classID: qr.classID,
     date: new Date().toISOString().split("T")[0],
-    status: "present"
+    status: "present",
+    markedAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   document.getElementById("attendance-status").innerText = "Attendance marked ✅";
@@ -115,7 +119,7 @@ async function scanQR() {
 /* ================= STUDENT: REQUEST CORRECTION ================= */
 async function requestCorrection() {
   const classID = document.getElementById("correction-class-id").value.trim();
-  if (!classID) return;
+  if (!classID) return alert("Enter Class ID");
 
   const cls = await db.collection("classes").doc(classID).get();
   if (!cls.exists) {
@@ -131,7 +135,8 @@ async function requestCorrection() {
     studentID: currentUser.uid,
     teacherID: cls.data().teacherID,
     reason,
-    status: "pending"
+    status: "pending",
+    requestedAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   document.getElementById("correction-status").innerText = "Request sent ✅";
@@ -153,27 +158,26 @@ async function loadTeacherCorrections() {
     return;
   }
 
-  snap.forEach(d => {
-    const c = d.data();
+  snap.forEach(doc => {
+    const data = doc.data();
     const div = document.createElement("div");
+    div.classList.add("correction-item");
 
     div.innerHTML = `
-      <p>
-        Class: ${c.classID}<br>
-        Student: ${c.studentID}<br>
-        Reason: ${c.reason}
-      </p>
+      <p>Class: ${data.classID}<br>
+      Student: ${data.studentID}<br>
+      Reason: ${data.reason}</p>
     `;
 
-    const a = document.createElement("button");
-    a.innerText = "Approve";
-    a.onclick = () => updateCorrection(d.id, c, "approved");
+    const approveBtn = document.createElement("button");
+    approveBtn.innerText = "Approve";
+    approveBtn.onclick = () => updateCorrection(doc.id, data, "approved");
 
-    const r = document.createElement("button");
-    r.innerText = "Reject";
-    r.onclick = () => updateCorrection(d.id, c, "rejected");
+    const rejectBtn = document.createElement("button");
+    rejectBtn.innerText = "Reject";
+    rejectBtn.onclick = () => updateCorrection(doc.id, data, "rejected");
 
-    div.append(a, r);
+    div.append(approveBtn, rejectBtn);
     box.appendChild(div);
   });
 }
@@ -191,7 +195,7 @@ async function updateCorrection(id, data, status) {
     });
   }
 
-  logAudit("CORRECTION_" + status.toUpperCase());
+  logAudit(`CORRECTION_${status.toUpperCase()}`);
   loadTeacherCorrections();
 }
 
@@ -204,14 +208,14 @@ async function loadEditableClasses() {
     .where("teacherID", "==", currentUser.uid)
     .get();
 
-  snap.forEach(d => {
+  snap.forEach(doc => {
     const input = document.createElement("input");
-    input.value = d.data().className;
+    input.value = doc.data().className;
 
     const btn = document.createElement("button");
     btn.innerText = "Update";
     btn.onclick = async () => {
-      await d.ref.update({ className: input.value });
+      await doc.ref.update({ className: input.value });
       logAudit("CLASS_UPDATED");
     };
 
@@ -228,9 +232,9 @@ async function loadTodayClasses() {
   const snap = await db.collection("classes").get();
 
   let found = false;
-  snap.forEach(d => {
-    if ((d.data().days || []).includes(today)) {
-      box.innerHTML += `<p>${d.data().className}</p>`;
+  snap.forEach(doc => {
+    if ((doc.data().days || []).includes(today)) {
+      box.innerHTML += `<p>${doc.data().className}</p>`;
       found = true;
     }
   });
@@ -238,7 +242,7 @@ async function loadTodayClasses() {
   if (!found) box.innerText = "No classes today";
 }
 
-/* ================= PREDICTION ================= */
+/* ================= STUDENT: ATTENDANCE PREDICTION ================= */
 async function getPredictionSafe() {
   const snap = await db.collection("attendance")
     .where("studentID", "==", currentUser.uid)
@@ -248,7 +252,7 @@ async function getPredictionSafe() {
     snap.size >= 5 ? "Good attendance 👍" : "Attendance at risk ⚠️";
 }
 
-/* ================= AUDIT ================= */
+/* ================= AUDIT LOGS ================= */
 function logAudit(action) {
   db.collection("audit_logs").add({
     userID: currentUser.uid,
@@ -268,7 +272,7 @@ async function loadAuditLogs() {
     .limit(10)
     .get();
 
-  snap.forEach(d => box.innerHTML += `<p>${d.data().action}</p>`);
+  snap.forEach(doc => box.innerHTML += `<p>${doc.data().action}</p>`);
 }
 
 /* ================= AUDIT GRAPH ================= */
@@ -286,8 +290,6 @@ async function loadAuditGraph() {
       ["Action", "Count"],
       ...Object.entries(map)
     ]);
-    new google.visualization.PieChart(
-      document.getElementById("auditGraph")
-    ).draw(data);
+    new google.visualization.PieChart(document.getElementById("auditGraph")).draw(data);
   });
 }
