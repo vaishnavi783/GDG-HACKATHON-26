@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Smart Attend+</title>
 
+<!-- Fonts -->
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- CSS -->
 <link rel="stylesheet" href="style.css">
 
 <!-- Google Charts -->
@@ -16,12 +19,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-<style>
-/* Add this if not in style.css */
-.hidden { display: none !important; }
-</style>
 </head>
-
 <body>
 
 <!-- LOGIN PAGE -->
@@ -57,59 +55,53 @@
 
   <div class="dashboard-grid">
 
-    <!-- TEACHER: Generate QR -->
+    <!-- TEACHER CARDS -->
     <div class="card teacher-only hidden">
       <h3>📷 Generate QR</h3>
       <button onclick="generateQR()">Generate QR</button>
       <div id="qr-output"><p>No QR generated yet</p></div>
     </div>
 
-    <!-- TEACHER: Edit Classes -->
     <div class="card teacher-only hidden">
       <h3>📝 Edit Classes</h3>
       <div id="edit-classes"><p>No classes found</p></div>
     </div>
 
-    <!-- TEACHER: View / Approve Corrections -->
     <div class="card teacher-only hidden">
       <h3>✅ Pending Correction Requests</h3>
       <div id="correction-requests"><p>No pending requests</p></div>
     </div>
 
-    <!-- STUDENT: Scan QR -->
+    <!-- STUDENT CARDS -->
     <div class="card student-only hidden">
       <h3>📷 Scan QR & Mark Attendance</h3>
       <button onclick="scanQR()">Scan QR</button>
       <p id="attendance-status"></p>
     </div>
 
-    <!-- STUDENT: Request Correction -->
     <div class="card student-only hidden">
       <h3>🔐 Request Correction</h3>
       <button onclick="requestCorrection(prompt('Enter Class ID'))">Request Correction</button>
       <p id="correction-status"></p>
     </div>
 
-    <!-- STUDENT: Attendance Prediction -->
     <div class="card student-only hidden">
       <h3>📊 Attendance Prediction</h3>
       <button onclick="getPredictionSafe()">Check Prediction</button>
       <p id="prediction-status"></p>
     </div>
 
-    <!-- COMMON: Today's Classes -->
+    <!-- COMMON CARDS -->
     <div class="card">
       <h3>🎯 Today's Classes</h3>
       <div id="todays-classes"><p>No classes scheduled for today</p></div>
     </div>
 
-    <!-- COMMON: Audit Logs -->
     <div class="card">
       <h3>🧾 Audit Logs</h3>
       <div id="audit-logs"><p>No recent actions</p></div>
     </div>
 
-    <!-- COMMON: Audit Graph -->
     <div class="card">
       <h3>📈 Audit Graph</h3>
       <div id="auditGraph" style="height:300px;"></div>
@@ -118,6 +110,7 @@
   </div>
 </div>
 
+<!-- FIREBASE CONFIG -->
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyDehcanIPU9BuOuI7qOFjW7cAFXRSExIB0",
