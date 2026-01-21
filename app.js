@@ -23,6 +23,7 @@ const auditGraph = document.getElementById("auditGraph");
 const correctionRequests = document.getElementById("correction-requests");
 const predictionStatus = document.getElementById("prediction-status");
 const attendanceStatus = document.getElementById("attendance-status");
+const correctionStatus = document.getElementById("correction-status");
 
 let currentUser = null;
 
@@ -34,7 +35,11 @@ const randomToken = () => Math.random().toString(36).substring(2, 10).toUpperCas
 /* ===== LOGIN ===== */
 async function login() {
   try {
-    const cred = await auth.signInWithEmailAndPassword(emailInput.value.trim(), passwordInput.value);
+    const cred = await auth.signInWithEmailAndPassword(
+      emailInput.value.trim(),
+      passwordInput.value
+    );
+
     const snap = await db.collection("users").doc(cred.user.uid).get();
     if (!snap.exists) throw "User profile missing";
 
@@ -117,7 +122,11 @@ async function scanQR() {
     const token = prompt("Enter QR token");
     if (!token) return;
 
-    const snap = await db.collection("qr_sessions").where("qrToken", "==", token).where("active", "==", true).get();
+    const snap = await db.collection("qr_sessions")
+      .where("qrToken", "==", token)
+      .where("active", "==", true)
+      .get();
+
     if (snap.empty) { alert("Invalid or expired QR"); return; }
 
     const qr = snap.docs[0].data();
@@ -163,11 +172,11 @@ async function requestCorrection(classID) {
     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
-  alert("Correction requested");
+  correctionStatus.innerText = "Correction requested ✅";
   logAudit("CORRECTION_REQUESTED");
 }
 
-/* ===== TEACHER: VIEW / APPROVE / REJECT ===== */
+/* ===== TEACHER: VIEW / APPROVE / REJECT CORRECTIONS ===== */
 async function loadTeacherCorrections() {
   correctionRequests.innerHTML = "";
 
@@ -233,6 +242,7 @@ async function loadEditableClasses() {
       await db.collection("classes").doc(d.id).update({ className: newName });
       alert("Class updated ✅");
       logAudit("CLASS_UPDATED");
+      loadEditableClasses();
     });
 
     div.appendChild(input);
@@ -252,12 +262,14 @@ async function loadTodayClasses() {
   todaysClasses.innerHTML = "";
   const snap = await db.collection("classes").get();
   let found = false;
+
   snap.forEach(d => {
     if ((d.data().days || []).includes(todayName())) {
       found = true;
       todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
     }
   });
+
   if (!found) todaysClasses.innerHTML = "<p>No classes today</p>";
 }
 
