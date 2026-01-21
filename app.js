@@ -122,21 +122,19 @@ async function scanQR() {
 
 /* ================= STUDENT: REQUEST CORRECTION ================= */
 async function requestCorrection() {
-  const className = document.getElementById("correction-class-id").value.trim();
-  if (!className) return alert("Enter Class Name");
+  let classNameInput = document.getElementById("correction-class-id").value.trim();
+  if (!classNameInput) return alert("Enter Class Name");
 
-  // Query class by name
-  const clsSnap = await db.collection("classes")
-    .where("className", "==", className)
-    .get();
+  const classNameLower = classNameInput.toLowerCase();
 
-  if (clsSnap.empty) {
+  // Query all classes and find match (case-insensitive)
+  const snap = await db.collection("classes").get();
+  const clsDoc = snap.docs.find(d => (d.data().className || "").toLowerCase() === classNameLower);
+
+  if (!clsDoc) {
     document.getElementById("correction-status").innerText = "Invalid Class Name";
     return;
   }
-
-  const clsDoc = clsSnap.docs[0];
-  const clsData = clsDoc.data();
 
   const reason = prompt("Enter reason for correction");
   if (!reason) return;
@@ -144,7 +142,7 @@ async function requestCorrection() {
   await db.collection("corrections").add({
     classID: clsDoc.id,
     studentID: currentUser.uid,
-    teacherID: clsData.teacherID,
+    teacherID: clsDoc.data().teacherID,
     reason,
     status: "pending",
     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
