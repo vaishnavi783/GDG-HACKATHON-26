@@ -29,8 +29,7 @@ let currentUser = null;
 /* ===== UTILS ===== */
 const todayDate = () => new Date().toISOString().split("T")[0];
 const todayName = () => new Date().toLocaleString("en-US", { weekday: "long" });
-const randomToken = () =>
-  Math.random().toString(36).substring(2, 10).toUpperCase();
+const randomToken = () => Math.random().toString(36).substring(2, 10).toUpperCase();
 
 /* ===== LOGIN ===== */
 async function login() {
@@ -210,13 +209,16 @@ async function loadTeacherCorrections() {
   snap.forEach(d => {
     const data = d.data();
     correctionRequests.innerHTML += `
-      <p>
-        Class: ${data.classId} <br>
-        Student: ${data.studentId} <br>
-        Reason: ${data.reason || 'N/A'} <br>
-        <button onclick="updateCorrection('${d.id}','approved')">Approve</button>
-        <button onclick="updateCorrection('${d.id}','rejected')">Reject</button>
-      </p>`;
+      <div class="correction-request">
+        <p>
+          Class: ${data.classId} <br>
+          Student: ${data.studentId} <br>
+          Reason: ${data.reason || 'N/A'}
+        </p>
+        <button onclick="updateCorrection('${d.id}', 'approved')">Approve</button>
+        <button onclick="updateCorrection('${d.id}', 'rejected')">Reject</button>
+      </div>
+    `;
   });
 }
 
@@ -241,10 +243,24 @@ async function loadEditableClasses() {
 
   snap.forEach(d => {
     editClasses.innerHTML += `
-      <input value="${d.data().className}"
-      onchange="db.collection('classes').doc('${d.id}')
-      .update({ className: this.value })">`;
+      <div class="class-edit">
+        <input id="class-${d.id}" value="${d.data().className}">
+        <button onclick="updateClassName('${d.id}')">Update</button>
+      </div>
+    `;
   });
+}
+
+async function updateClassName(id) {
+  const input = document.getElementById("class-" + id);
+  if (!input.value.trim()) return alert("Class name cannot be empty");
+
+  await db.collection("classes").doc(id).update({
+    className: input.value.trim()
+  });
+
+  alert("Class updated ✅");
+  logAudit("CLASS_UPDATED");
 }
 
 /* ===== PREDICTION ===== */
