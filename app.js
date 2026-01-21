@@ -43,7 +43,7 @@ async function login() {
     if (!snap.exists) throw "User profile missing";
 
     currentUser = { uid: cred.user.uid, ...snap.data() };
-    
+
     if (currentUser.role.toLowerCase().trim() !== roleSelect.value.toLowerCase())
       throw "Role mismatch";
 
@@ -147,7 +147,7 @@ async function scanQR() {
     if (distance > geo.radius / 100000) { alert("Outside allowed location"); return; }
 
     await db.collection("attendance").add({
-      studentUid: currentUser.uid,
+      studentID: currentUser.uid,
       classID: qr.classID,
       date: todayDate(),
       locationVerified: true,
@@ -168,8 +168,8 @@ async function requestCorrection(classID) {
   if (!reason) return alert("Correction reason is required");
 
   await db.collection("corrections").add({
-    studentId: currentUser.uid,
-    classId: classID,
+    studentID: currentUser.uid,
+    classID: classID,
     reason,
     status: "pending",
     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -196,8 +196,8 @@ async function loadTeacherCorrections() {
 
     div.innerHTML = `
       <p>
-        Class: ${data.classId} <br>
-        Student: ${data.studentId} <br>
+        Class: ${data.classID} <br>
+        Student: ${data.studentID} <br>
         Reason: ${data.reason || 'N/A'}
       </p>
     `;
