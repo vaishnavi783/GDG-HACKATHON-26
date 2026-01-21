@@ -15,6 +15,11 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+/* Add this if not in style.css */
+.hidden { display: none !important; }
+</style>
 </head>
 
 <body>
@@ -39,7 +44,7 @@
 </div>
 
 <!-- DASHBOARD -->
-<div id="dashboard" style="display:none;">
+<div id="dashboard" class="hidden">
   <header>
     🌸 Smart Attendance & Wellness Portal
     <button onclick="logout()">Logout</button>
@@ -53,40 +58,40 @@
   <div class="dashboard-grid">
 
     <!-- TEACHER: Generate QR -->
-    <div class="card teacher-only" style="display:none;">
+    <div class="card teacher-only hidden">
       <h3>📷 Generate QR</h3>
       <button onclick="generateQR()">Generate QR</button>
       <div id="qr-output"><p>No QR generated yet</p></div>
     </div>
 
     <!-- TEACHER: Edit Classes -->
-    <div class="card teacher-only" style="display:none;">
+    <div class="card teacher-only hidden">
       <h3>📝 Edit Classes</h3>
       <div id="edit-classes"><p>No classes found</p></div>
     </div>
 
     <!-- TEACHER: View / Approve Corrections -->
-    <div class="card teacher-only" style="display:none;">
+    <div class="card teacher-only hidden">
       <h3>✅ Pending Correction Requests</h3>
       <div id="correction-requests"><p>No pending requests</p></div>
     </div>
 
     <!-- STUDENT: Scan QR -->
-    <div class="card student-only" style="display:none;">
+    <div class="card student-only hidden">
       <h3>📷 Scan QR & Mark Attendance</h3>
       <button onclick="scanQR()">Scan QR</button>
       <p id="attendance-status"></p>
     </div>
 
     <!-- STUDENT: Request Correction -->
-    <div class="card student-only" style="display:none;">
+    <div class="card student-only hidden">
       <h3>🔐 Request Correction</h3>
       <button onclick="requestCorrection(prompt('Enter Class ID'))">Request Correction</button>
       <p id="correction-status"></p>
     </div>
 
     <!-- STUDENT: Attendance Prediction -->
-    <div class="card student-only" style="display:none;">
+    <div class="card student-only hidden">
       <h3>📊 Attendance Prediction</h3>
       <button onclick="getPredictionSafe()">Check Prediction</button>
       <p id="prediction-status"></p>
