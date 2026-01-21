@@ -45,7 +45,7 @@ async function login() {
 
     currentUser = { uid: cred.user.uid, ...snap.data() };
 
-    if (currentUser.role.toLowerCase().trim() !== roleSelect.value.toLowerCase())
+    if (currentUser.role !== roleSelect.value)
       throw "Role mismatch";
 
     logAudit("LOGIN");
@@ -70,18 +70,19 @@ function showDashboard() {
   userRole.innerText = currentUser.role;
   quoteText.innerText = "Consistency beats motivation.";
 
-  // Hide all role-specific cards first
-  document.querySelectorAll(".teacher-only, .student-only").forEach(el => el.style.display = "none");
+  document.querySelectorAll(".teacher-only,.student-only")
+    .forEach(el => el.style.display = "none");
 
-  if (currentUser.role.toLowerCase() === "teacher") {
-    document.querySelectorAll(".teacher-only").forEach(el => el.style.display = "block");
+  if (currentUser.role === "teacher") {
+    document.querySelectorAll(".teacher-only")
+      .forEach(el => el.style.display = "block");
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
-  if (currentUser.role.toLowerCase() === "student") {
-    document.querySelectorAll(".student-only").forEach(el => el.style.display = "block");
-    getPredictionSafe();
+  if (currentUser.role === "student") {
+    document.querySelectorAll(".student-only")
+      .forEach(el => el.style.display = "block");
   }
 
   loadTodayClasses();
@@ -92,22 +93,34 @@ function showDashboard() {
 /* ================= TEACHER: GENERATE QR ================= */
 async function generateQR() {
   qrOutput.innerHTML = "";
-  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
+
+  const snap = await db.collection("classes")
+    .where("teacherID", "==", currentUser.uid)
+    .get();
+
   if (snap.empty) {
-    qrOutput.innerHTML = "<p>No classes assigned</p>";
+    qrOutput.innerHTML = "No classes assigned";
     return;
   }
 
   for (const d of snap.docs) {
+    // deactivate old QRs
+    const old = await db.collection("qr_sessions")
+      .where("classID", "==", d.id)
+      .get();
+
+    old.forEach(q => q.ref.update({ active: false }));
+
     const token = randomToken();
+
     await db.collection("qr_sessions").add({
       classID: d.id,
       teacherID: currentUser.uid,
       qrToken: token,
-      validFrom: Date.now(),
-      validTill: Date.now() + 5 * 60 * 1000, // 5 minutes
+      validTill: Date.now() + 5 * 60 * 1000,
       active: true
     });
+
     qrOutput.innerHTML += `<p>${d.data().className} → <b>${token}</b></p>`;
   }
 
@@ -116,57 +129,45 @@ async function generateQR() {
 
 /* ================= STUDENT: SCAN QR ================= */
 async function scanQR() {
-  if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
+  const token = prompt("Enter QR token");
+  if (!token) return;
 
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const token = prompt("Enter QR token");
-    if (!token) return;
+  const snap = await db.collection("qr_sessions")
+    .where("qrToken", "==", token)
+    .where("active", "==", true)
+    .get();
 
-    const snap = await db.collection("qr_sessions")
-      .where("qrToken", "==", token)
-      .where("active", "==", true)
-      .get();
+  if (snap.empty) return alert("Invalid or expired QR");
 
-    if (snap.empty) { alert("Invalid or expired QR"); return; }
+  const qr = snap.docs[0].data();
 
-    const qr = snap.docs[0].data();
-    if (qr.validTill < Date.now()) { alert("QR expired"); return; }
-
-    const geoSnap = await db.collection("geo_fences").get();
-    if (geoSnap.empty) { alert("No geo-fence defined"); return; }
-    const geo = geoSnap.docs[0].data();
-
-    const distance = Math.abs(pos.coords.latitude - geo.latitude) + Math.abs(pos.coords.longitude - geo.longitude);
-    if (distance > geo.radius / 100000) { alert("Outside allowed location"); return; }
-
-    await db.collection("attendance").add({
-      studentID: currentUser.uid,
-      classID: qr.classID,
-      date: todayDate(),
-      locationVerified: true,
-      qrVerified: true,
-      status: "present",
-      markedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    attendanceStatus.innerText = "Attendance marked successfully ✅";
-    logAudit("ATTENDANCE_MARKED");
+  await db.collection("attendance").add({
+    studentID: currentUser.uid,
+    classID: qr.classID,
+    date: todayDate(),
+    status: "present",
+    markedAt: firebase.firestore.FieldValue.serverTimestamp()
   });
+
+  attendanceStatus.innerText = "Attendance marked ✅";
+  logAudit("ATTENDANCE_MARKED");
 }
 
 /* ================= STUDENT: REQUEST CORRECTION ================= */
-async function requestCorrection(classID) {
-  if (!classID) return;
-  const reason = prompt("Enter reason for correction:");
-  if (!reason) return alert("Correction reason is required");
+async function requestCorrection() {
+  const classID = document.getElementById("correction-class-id").value.trim();
+  if (!classID) return alert("Enter Class ID");
 
-  const classSnap = await db.collection("classes").doc(classID).get();
-  if (!classSnap.exists) return alert("Class not found");
+  const reason = prompt("Enter reason");
+  if (!reason) return;
+
+  const cls = await db.collection("classes").doc(classID).get();
+  if (!cls.exists) return alert("Invalid class");
 
   await db.collection("corrections").add({
     studentID: currentUser.uid,
     classID,
-    teacherID: classSnap.data().teacherID,
+    teacherID: cls.data().teacherID,
     reason,
     status: "pending",
     requestedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -176,104 +177,103 @@ async function requestCorrection(classID) {
   logAudit("CORRECTION_REQUESTED");
 }
 
-/* ================= TEACHER: LOAD / APPROVE / REJECT CORRECTIONS ================= */
+/* ================= TEACHER: CORRECTIONS ================= */
 async function loadTeacherCorrections() {
   correctionRequests.innerHTML = "";
 
-  const snap = await db.collection("corrections").where("status", "==", "pending").get();
-  const teacherCorrections = snap.docs.filter(d => d.data().teacherID === currentUser.uid);
+  const snap = await db.collection("corrections")
+    .where("teacherID", "==", currentUser.uid)
+    .where("status", "==", "pending")
+    .get();
 
-  if (!teacherCorrections.length) {
-    correctionRequests.innerHTML = "<p>No pending requests</p>";
+  if (snap.empty) {
+    correctionRequests.innerHTML = "No pending requests";
     return;
   }
 
-  teacherCorrections.forEach(d => {
-    const data = d.data();
-    const div = document.createElement("div");
-    div.className = "correction-request";
+  snap.forEach(d => {
+    const c = d.data();
 
+    const div = document.createElement("div");
     div.innerHTML = `
       <p>
-        Class: ${data.classID} <br>
-        Student: ${data.studentID} <br>
-        Reason: ${data.reason || 'N/A'}
+        Class: ${c.classID}<br>
+        Student: ${c.studentID}<br>
+        Reason: ${c.reason}
       </p>
     `;
 
-    const approveBtn = document.createElement("button");
-    approveBtn.innerText = "Approve";
-    approveBtn.addEventListener("click", () => updateCorrection(d.id, "approved"));
+    const approve = document.createElement("button");
+    approve.innerText = "Approve";
+    approve.onclick = () => updateCorrection(d.id, c, "approved");
 
-    const rejectBtn = document.createElement("button");
-    rejectBtn.innerText = "Reject";
-    rejectBtn.addEventListener("click", () => updateCorrection(d.id, "rejected"));
+    const reject = document.createElement("button");
+    reject.innerText = "Reject";
+    reject.onclick = () => updateCorrection(d.id, c, "rejected");
 
-    div.appendChild(approveBtn);
-    div.appendChild(rejectBtn);
+    div.append(approve, reject);
     correctionRequests.appendChild(div);
   });
 }
 
-async function updateCorrection(id, status) {
+async function updateCorrection(id, data, status) {
   await db.collection("corrections").doc(id).update({ status });
+
+  if (status === "approved") {
+    await db.collection("attendance").add({
+      studentID: data.studentID,
+      classID: data.classID,
+      date: todayDate(),
+      status: "present",
+      corrected: true
+    });
+  }
+
   logAudit("CORRECTION_" + status.toUpperCase());
   loadTeacherCorrections();
 }
 
-/* ================= TEACHER: EDIT CLASSES ================= */
+/* ================= EDIT CLASSES ================= */
 async function loadEditableClasses() {
   editClasses.innerHTML = "";
-  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
-  if (snap.empty) { editClasses.innerHTML = "<p>No classes found</p>"; return; }
+
+  const snap = await db.collection("classes")
+    .where("teacherID", "==", currentUser.uid)
+    .get();
 
   snap.forEach(d => {
-    const div = document.createElement("div");
-    div.className = "class-edit";
-
     const input = document.createElement("input");
     input.value = d.data().className;
 
     const btn = document.createElement("button");
     btn.innerText = "Update";
-    btn.addEventListener("click", async () => {
-      const newName = input.value.trim();
-      if (!newName) return alert("Class name cannot be empty");
-      await db.collection("classes").doc(d.id).update({ className: newName });
-      alert("Class updated ✅");
+    btn.onclick = async () => {
+      await d.ref.update({ className: input.value });
       logAudit("CLASS_UPDATED");
-      loadEditableClasses();
-    });
+    };
 
-    div.appendChild(input);
-    div.appendChild(btn);
-    editClasses.appendChild(div);
+    editClasses.append(input, btn);
   });
-}
-
-/* ================= STUDENT: ATTENDANCE PREDICTION ================= */
-async function getPredictionSafe() {
-  const doc = await db.collection("predictions").doc(currentUser.uid).get();
-  predictionStatus.innerText = doc.exists ? doc.data().prediction : "No prediction data";
 }
 
 /* ================= TODAY CLASSES ================= */
 async function loadTodayClasses() {
   todaysClasses.innerHTML = "";
+
   const snap = await db.collection("classes").get();
   let found = false;
 
   snap.forEach(d => {
     if ((d.data().days || []).includes(todayName())) {
-      found = true;
       todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
+      found = true;
     }
   });
 
-  if (!found) todaysClasses.innerHTML = "<p>No classes today</p>";
+  if (!found) todaysClasses.innerHTML = "No classes today";
 }
 
-/* ================= AUDIT LOGS ================= */
+/* ================= AUDIT ================= */
 function logAudit(action) {
   db.collection("audit_logs").add({
     userID: currentUser.uid,
@@ -291,27 +291,24 @@ async function loadAuditLogs() {
     .limit(10)
     .get();
 
-  snap.forEach(d => {
-    auditLogs.innerHTML += `<p>${d.data().action}</p>`;
-  });
+  snap.forEach(d => auditLogs.innerHTML += `<p>${d.data().action}</p>`);
 }
 
 /* ================= AUDIT GRAPH ================= */
 google.charts.load("current", { packages: ["corechart"] });
 async function loadAuditGraph() {
-  const snap = await db.collection("audit_logs").get();
+  const snap = await db.collection("audit_logs")
+    .where("userID", "==", currentUser.uid)
+    .get();
+
   const map = {};
-  snap.forEach(d => {
-    const action = d.data().action;
-    map[action] = (map[action] || 0) + 1;
-  });
+  snap.forEach(d => map[d.data().action] = (map[d.data().action] || 0) + 1);
 
   google.charts.setOnLoadCallback(() => {
     const data = google.visualization.arrayToDataTable([
       ["Action", "Count"],
       ...Object.entries(map)
     ]);
-    const chart = new google.visualization.PieChart(auditGraph);
-    chart.draw(data, { height: 300 });
+    new google.visualization.PieChart(auditGraph).draw(data);
   });
 }
