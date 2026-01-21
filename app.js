@@ -26,6 +26,8 @@ async function login() {
     document.getElementById("quoteText").innerText = "Consistency beats motivation.";
 
     toggleRoleUI();
+
+    // Load data (safe for empty collections)
     loadTodayClasses();
     loadAuditLogs();
     loadAuditGraph();
@@ -57,22 +59,24 @@ function toggleRoleUI() {
 
 /* ================= TEACHER: GENERATE QR ================= */
 async function generateQR() {
-  const snap = await db.collection("classes").where("teacherID", "==", currentUser.uid).get();
+  const snap = await db.collection("classes")
+    .where("teacherID", "==", currentUser.uid)
+    .get();
+
   const out = document.getElementById("qr-output");
   out.innerHTML = "";
 
   if (snap.empty) {
-    out.innerText = "No classes assigned";
+    out.innerText = "No classes assigned yet.";
     return;
   }
 
   for (const doc of snap.docs) {
-    // Deactivate old QRs
-    const oldQRs = await db.collection("qr_sessions").where("classID", "==", doc.id).get();
+    const oldQRs = await db.collection("qr_sessions")
+      .where("classID", "==", doc.id).get();
     oldQRs.forEach(q => q.ref.update({ active: false }));
 
     const token = Math.random().toString(36).substring(2, 8).toUpperCase();
-
     await db.collection("qr_sessions").add({
       classID: doc.id,
       teacherID: currentUser.uid,
@@ -154,7 +158,7 @@ async function loadTeacherCorrections() {
     .get();
 
   if (snap.empty) {
-    box.innerText = "No pending requests";
+    box.innerHTML = "<p>No pending requests</p>";
     return;
   }
 
@@ -171,11 +175,11 @@ async function loadTeacherCorrections() {
 
     const approveBtn = document.createElement("button");
     approveBtn.innerText = "Approve";
-    approveBtn.onclick = async () => await updateCorrection(doc.id, data, "approved");
+    approveBtn.onclick = () => updateCorrection(doc.id, data, "approved");
 
     const rejectBtn = document.createElement("button");
     rejectBtn.innerText = "Reject";
-    rejectBtn.onclick = async () => await updateCorrection(doc.id, data, "rejected");
+    rejectBtn.onclick = () => updateCorrection(doc.id, data, "rejected");
 
     div.append(approveBtn, rejectBtn);
     box.appendChild(div);
@@ -196,7 +200,7 @@ async function updateCorrection(id, data, status) {
   }
 
   logAudit(`CORRECTION_${status.toUpperCase()}`);
-  loadTeacherCorrections();
+  loadTeacherCorrections(); // refresh
 }
 
 /* ================= TEACHER: EDIT CLASSES ================= */
@@ -207,6 +211,11 @@ async function loadEditableClasses() {
   const snap = await db.collection("classes")
     .where("teacherID", "==", currentUser.uid)
     .get();
+
+  if (snap.empty) {
+    box.innerHTML = "<p>No classes assigned</p>";
+    return;
+  }
 
   snap.forEach(doc => {
     const input = document.createElement("input");
@@ -250,6 +259,7 @@ async function getPredictionSafe() {
 
   document.getElementById("prediction-status").innerText =
     snap.size >= 5 ? "Good attendance 👍" : "Attendance at risk ⚠️";
+  logAudit("PREDICTION_VIEWED");
 }
 
 /* ================= AUDIT LOGS ================= */
@@ -271,6 +281,8 @@ async function loadAuditLogs() {
     .orderBy("timestamp", "desc")
     .limit(10)
     .get();
+
+  if (snap.empty) box.innerHTML = "<p>No recent actions</p>";
 
   snap.forEach(doc => box.innerHTML += `<p>${doc.data().action}</p>`);
 }
