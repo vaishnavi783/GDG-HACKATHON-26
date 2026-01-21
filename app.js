@@ -21,38 +21,43 @@ const todaysClasses = document.getElementById("todays-classes");
 const auditLogs = document.getElementById("audit-logs");
 const auditGraph = document.getElementById("auditGraph");
 const correctionRequests = document.getElementById("correction-requests");
-const statusEl = document.getElementById("prediction-status");
+const predictionStatus = document.getElementById("prediction-status");
+const attendanceStatus = document.getElementById("attendance-status");
 
 let currentUser = null;
 
 /* ===== UTILS ===== */
 const todayDate = () => new Date().toISOString().split("T")[0];
 const todayName = () => new Date().toLocaleString("en-US", { weekday: "long" });
-const randomToken = () => Math.random().toString(36).substring(2, 10).toUpperCase();
+const randomToken = () =>
+  Math.random().toString(36).substring(2, 10).toUpperCase();
 
 /* ===== LOGIN ===== */
 async function login() {
-  const email = emailInput.value.trim();
-  const password = passwordInput.value;
-  const role = roleSelect.value.toLowerCase();
-  const err = document.getElementById("login-error");
-
-  err.innerText = "";
-
   try {
-    const cred = await auth.signInWithEmailAndPassword(email, password);
-    const snap = await db.collection("users").doc(cred.user.uid).get();
+    const cred = await auth.signInWithEmailAndPassword(
+      emailInput.value.trim(),
+      passwordInput.value
+    );
 
+    const snap = await db.collection("users").doc(cred.user.uid).get();
     if (!snap.exists) throw "User profile missing";
 
-    if (snap.data().role.toLowerCase() !== role) throw "Role mismatch";
+    if (snap.data().role.toLowerCase() !== roleSelect.value.toLowerCase())
+      throw "Role mismatch";
 
     currentUser = { uid: cred.user.uid, ...snap.data() };
     logAudit("LOGIN");
     showDashboard();
   } catch (e) {
-    err.innerText = e;
+    document.getElementById("login-error").innerText = e;
   }
+}
+
+/* ===== LOGOUT ===== */
+function logout() {
+  auth.signOut();
+  location.reload();
 }
 
 /* ===== DASHBOARD ===== */
@@ -65,16 +70,18 @@ function showDashboard() {
   quoteText.innerText = "Consistency beats motivation.";
 
   document.querySelectorAll(".teacher-only,.student-only")
-    .forEach(e => e.classList.add("hidden"));
+    .forEach(el => el.classList.add("hidden"));
 
   if (currentUser.role === "teacher") {
-    document.querySelectorAll(".teacher-only").forEach(e => e.classList.remove("hidden"));
+    document.querySelectorAll(".teacher-only")
+      .forEach(el => el.classList.remove("hidden"));
     loadEditableClasses();
     loadTeacherCorrections();
   }
 
   if (currentUser.role === "student") {
-    document.querySelectorAll(".student-only").forEach(e => e.classList.remove("hidden"));
+    document.querySelectorAll(".student-only")
+      .forEach(el => el.classList.remove("hidden"));
     getPredictionSafe();
   }
 
@@ -85,6 +92,8 @@ function showDashboard() {
 
 /* ===== TEACHER: GENERATE QR ===== */
 async function generateQR() {
+  qrOutput.innerHTML = "";
+
   const snap = await db.collection("classes")
     .where("teacherID", "==", currentUser.uid)
     .get();
@@ -94,8 +103,6 @@ async function generateQR() {
     return;
   }
 
-  qrOutput.innerHTML = "";
-
   for (const d of snap.docs) {
     const token = randomToken();
 
@@ -103,87 +110,161 @@ async function generateQR() {
       classID: d.id,
       teacherID: currentUser.uid,
       qrToken: token,
-      expiresAt: Date.now() + 5 * 60 * 1000,
+      validFrom: Date.now(),
+      validTill: Date.now() + 5 * 60 * 1000,
       active: true
     });
 
-    qrOutput.innerHTML += `<p><b>${d.data().className}</b>: ${token}</p>`;
+    qrOutput.innerHTML += `<p>${d.data().className} → <b>${token}</b></p>`;
   }
 
   logAudit("QR_CREATED");
 }
 
-/* ===== STUDENT: SCAN QR ===== */
+/* ===== STUDENT: SCAN QR WITH GEO-FENCING ===== */
 async function scanQR() {
-  const token = prompt("Enter QR token");
-  if (!token) return;
-
-  const snap = await db.collection("qr_sessions")
-    .where("qrToken", "==", token)
-    .where("active", "==", true)
-    .get();
-
-  if (snap.empty) {
-    alert("Invalid or expired QR");
+  if (!navigator.geolocation) {
+    alert("Geolocation not supported");
     return;
   }
 
-  const qr = snap.docs[0];
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const token = prompt("Enter QR token");
+    if (!token) return;
 
-  if (qr.data().expiresAt < Date.now()) {
-    alert("QR expired");
-    return;
-  }
+    const snap = await db.collection("qr_sessions")
+      .where("qrToken", "==", token)
+      .where("active", "==", true)
+      .get();
 
-  await db.collection("attendance").add({
-    studentID: currentUser.uid,
-    classID: qr.data().classID,
-    date: todayDate(),
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    if (snap.empty) {
+      alert("Invalid or expired QR");
+      return;
+    }
+
+    const qr = snap.docs[0].data();
+    if (qr.validTill < Date.now()) {
+      alert("QR expired");
+      return;
+    }
+
+    // Geo-fencing (100m approx)
+    const geoSnap = await db.collection("geo_fences").get();
+    const geo = geoSnap.docs[0].data();
+    const distance =
+      Math.abs(pos.coords.latitude - geo.latitude) +
+      Math.abs(pos.coords.longitude - geo.longitude);
+
+    if (distance > geo.radius / 100000) { // approximate check
+      alert("Outside allowed location");
+      return;
+    }
+
+    await db.collection("attendance").add({
+      studentUid: currentUser.uid,
+      classID: qr.classID,
+      date: todayDate(),
+      locationVerified: true,
+      qrVerified: true,
+      status: "present",
+      markedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    attendanceStatus.innerText = "Attendance marked successfully ✅";
+    logAudit("ATTENDANCE_MARKED");
   });
-
-  alert("Attendance marked");
-  logAudit("ATTENDANCE_MARKED");
 }
 
 /* ===== STUDENT: REQUEST CORRECTION ===== */
 async function requestCorrection(classID) {
+  if (!classID) return;
+
+  const reason = prompt("Enter reason for correction:");
+  if (!reason) return alert("Correction reason is required");
+
   await db.collection("corrections").add({
-    studentID: currentUser.uid,
-    classID,
+    studentId: currentUser.uid,
+    classId: classID,
+    reason,
     status: "pending",
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    requestedAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   alert("Correction requested");
+  logAudit("CORRECTION_REQUESTED");
+}
+
+/* ===== TEACHER: VIEW / APPROVE / REJECT ===== */
+async function loadTeacherCorrections() {
+  correctionRequests.innerHTML = "";
+
+  const snap = await db.collection("corrections")
+    .where("status", "==", "pending")
+    .get();
+
+  if (snap.empty) {
+    correctionRequests.innerHTML = "<p>No pending requests</p>";
+    return;
+  }
+
+  snap.forEach(d => {
+    const data = d.data();
+    correctionRequests.innerHTML += `
+      <p>
+        Class: ${data.classId} <br>
+        Student: ${data.studentId} <br>
+        Reason: ${data.reason || 'N/A'} <br>
+        <button onclick="updateCorrection('${d.id}','approved')">Approve</button>
+        <button onclick="updateCorrection('${d.id}','rejected')">Reject</button>
+      </p>`;
+  });
+}
+
+async function updateCorrection(id, status) {
+  await db.collection("corrections").doc(id).update({ status });
+  logAudit("CORRECTION_" + status.toUpperCase());
+  loadTeacherCorrections();
+}
+
+/* ===== TEACHER: EDIT CLASSES ===== */
+async function loadEditableClasses() {
+  editClasses.innerHTML = "";
+
+  const snap = await db.collection("classes")
+    .where("teacherID", "==", currentUser.uid)
+    .get();
+
+  if (snap.empty) {
+    editClasses.innerHTML = "<p>No classes found</p>";
+    return;
+  }
+
+  snap.forEach(d => {
+    editClasses.innerHTML += `
+      <input value="${d.data().className}"
+      onchange="db.collection('classes').doc('${d.id}')
+      .update({ className: this.value })">`;
+  });
 }
 
 /* ===== PREDICTION ===== */
 async function getPredictionSafe() {
-  try {
-    const doc = await db.collection("predictions").doc(currentUser.uid).get();
-    statusEl.innerText = doc.exists ? doc.data().prediction : "No prediction";
-  } catch {
-    statusEl.innerText = "Prediction unavailable";
-  }
+  const doc = await db.collection("predictions")
+    .doc(currentUser.uid)
+    .get();
+
+  predictionStatus.innerText =
+    doc.exists ? doc.data().prediction : "No prediction data";
 }
 
 /* ===== TODAY CLASSES ===== */
 async function loadTodayClasses() {
   todaysClasses.innerHTML = "";
-  const today = todayName();
-
-  const q = currentUser.role === "teacher"
-    ? db.collection("classes").where("teacherID", "==", currentUser.uid)
-    : db.collection("classes")
-        .where("department", "==", currentUser.department)
-        .where("year", "==", currentUser.year);
-
-  const snap = await q.get();
+  const snap = await db.collection("classes").get();
   let found = false;
 
   snap.forEach(d => {
-    if ((d.data().days || []).includes(today)) {
+    if ((d.data().days || []).includes(todayName())) {
       found = true;
       todaysClasses.innerHTML += `<p>${d.data().className}</p>`;
     }
@@ -204,6 +285,7 @@ function logAudit(action) {
 
 async function loadAuditLogs() {
   auditLogs.innerHTML = "";
+
   const snap = await db.collection("audit_logs")
     .where("userId", "==", currentUser.uid)
     .orderBy("timestamp", "desc")
@@ -225,9 +307,10 @@ async function loadAuditGraph() {
     map[d.data().action] = (map[d.data().action] || 0) + 1;
   });
 
-  const rows = [["Action", "Count"], ...Object.entries(map)];
   google.charts.setOnLoadCallback(() => {
     new google.visualization.PieChart(auditGraph)
-      .draw(google.visualization.arrayToDataTable(rows));
+      .draw(google.visualization.arrayToDataTable(
+        [["Action", "Count"], ...Object.entries(map)]
+      ));
   });
 }
